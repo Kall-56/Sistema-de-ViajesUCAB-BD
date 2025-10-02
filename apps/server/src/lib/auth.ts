@@ -1,14 +1,13 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { db } from "../db";
+import {pg} from "../db";
 import * as schema from "../db/schema/auth";
+import {PostgresJSDialect} from "kysely-postgres-js";
 
 export const auth = betterAuth<BetterAuthOptions>({
-	database: drizzleAdapter(db, {
-		provider: "pg",
-
-		schema: schema,
-	}),
+	database: new PostgresJSDialect({
+        postgres: pg,
+    }),
 	trustedOrigins: [process.env.CORS_ORIGIN || ""],
 	emailAndPassword: {
 		enabled: true,
