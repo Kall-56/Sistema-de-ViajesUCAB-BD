@@ -1,61 +1,109 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Separator } from "@/components/ui/separator"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Eye, EyeOff, Plane } from "lucide-react"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Eye, EyeOff, Plane } from "lucide-react";
 
 export function LoginRegisterForm() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  const router = useRouter();
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   // Login form state
-  const [loginEmail, setLoginEmail] = useState("")
-  const [loginPassword, setLoginPassword] = useState("")
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = useState(false);
 
   // Register form state
-  const [registerName, setRegisterName] = useState("")
-  const [registerEmail, setRegisterEmail] = useState("")
-  const [registerPassword, setRegisterPassword] = useState("")
-  const [registerConfirmPassword, setRegisterConfirmPassword] = useState("")
-  const [registerPhone, setRegisterPhone] = useState("")
-  const [registerBirthdate, setRegisterBirthdate] = useState("")
-  const [registerCountry, setRegisterCountry] = useState("")
+  const [registerName, setRegisterName] = useState("");
+  const [registerEmail, setRegisterEmail] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
+  const [registerPhone, setRegisterPhone] = useState("");
+  const [registerBirthdate, setRegisterBirthdate] = useState("");
+  const [registerCountry, setRegisterCountry] = useState("");
 
   // Password validation
   const validatePassword = (password: string) => {
-    const minLength = password.length >= 8
-    const hasNumber = /\d/.test(password)
-    const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password)
-    return { minLength, hasNumber, hasSymbol, isValid: minLength && hasNumber && hasSymbol }
-  }
+    const minLength = password.length >= 8;
+    const hasNumber = /\d/.test(password);
+    const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+    return {
+      minLength,
+      hasNumber,
+      hasSymbol,
+      isValid: minLength && hasNumber && hasSymbol,
+    };
+  };
 
-  const passwordValidation = validatePassword(registerPassword)
+  const passwordValidation = validatePassword(registerPassword);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault()
-    console.log("Login attempt:", { loginEmail, rememberMe })
-    // Add login logic here
-  }
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    setLoginLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          loginEmail,
+          loginPassword,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setLoginError(data.error || "Error al iniciar sesión");
+        return;
+      }
+
+      // Login correcto: redirigimos
+      router.push("/");
+    } catch (err) {
+      console.error(err);
+      setLoginError("Error de conexión con el servidor");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   const handleRegister = (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
     if (registerPassword !== registerConfirmPassword) {
-      alert("Las contraseñas no coinciden")
-      return
+      alert("Las contraseñas no coinciden");
+      return;
     }
     if (!passwordValidation.isValid) {
-      alert("La contraseña no cumple con los requisitos de seguridad")
-      return
+      alert("La contraseña no cumple con los requisitos de seguridad");
+      return;
     }
     console.log("Register attempt:", {
       registerName,
@@ -63,14 +111,14 @@ export function LoginRegisterForm() {
       registerPhone,
       registerBirthdate,
       registerCountry,
-    })
+    });
     // Add registration logic here
-  }
+  };
 
   const handleSocialLogin = (provider: string) => {
-    console.log("Social login with:", provider)
+    console.log("Social login with:", provider);
     // Add social login logic here
-  }
+  };
 
   return (
     <Card className="w-full shadow-xl">
@@ -80,8 +128,12 @@ export function LoginRegisterForm() {
             <Plane className="w-8 h-8 text-blue-600" />
           </div>
         </div>
-        <CardTitle className="text-2xl md:text-3xl font-bold">Bienvenido a ViajesUCAB</CardTitle>
-        <CardDescription className="md:hidden">Tu próxima aventura comienza aquí</CardDescription>
+        <CardTitle className="text-2xl md:text-3xl font-bold">
+          Bienvenido a ViajesUCAB
+        </CardTitle>
+        <CardDescription className="md:hidden">
+          Tu próxima aventura comienza aquí
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="login" className="w-full">
@@ -98,7 +150,9 @@ export function LoginRegisterForm() {
           <TabsContent value="login" className="space-y-4">
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="login-email">Correo electrónico o Usuario</Label>
+                <Label htmlFor="login-email">
+                  Correo electrónico o Usuario
+                </Label>
                 <Input
                   id="login-email"
                   type="text"
@@ -127,7 +181,11 @@ export function LoginRegisterForm() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -137,7 +195,9 @@ export function LoginRegisterForm() {
                   <Checkbox
                     id="remember"
                     checked={rememberMe}
-                    onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                    onCheckedChange={(checked) =>
+                      setRememberMe(checked as boolean)
+                    }
                   />
                   <label
                     htmlFor="remember"
@@ -146,12 +206,19 @@ export function LoginRegisterForm() {
                     Recordarme
                   </label>
                 </div>
-                <Button type="button" variant="link" className="px-0 text-blue-600 hover:text-blue-700">
+                <Button
+                  type="button"
+                  variant="link"
+                  className="px-0 text-blue-600 hover:text-blue-700"
+                >
                   ¿Olvidaste tu contraseña?
                 </Button>
               </div>
 
-              <Button type="submit" className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold">
+              <Button
+                type="submit"
+                className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+              >
                 Iniciar Sesión
               </Button>
             </form>
@@ -206,7 +273,11 @@ export function LoginRegisterForm() {
                 className="h-11 bg-transparent"
                 onClick={() => handleSocialLogin("apple")}
               >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
                   <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
                 </svg>
               </Button>
@@ -268,8 +339,14 @@ export function LoginRegisterForm() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="register-country">Nacionalidad / País de residencia</Label>
-                <Select value={registerCountry} onValueChange={setRegisterCountry} required>
+                <Label htmlFor="register-country">
+                  Nacionalidad / País de residencia
+                </Label>
+                <Select
+                  value={registerCountry}
+                  onValueChange={setRegisterCountry}
+                  required
+                >
                   <SelectTrigger className="h-11">
                     <SelectValue placeholder="Selecciona tu país" />
                   </SelectTrigger>
@@ -302,26 +379,53 @@ export function LoginRegisterForm() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
                 {registerPassword && (
                   <div className="text-xs space-y-1 mt-2">
-                    <p className={passwordValidation.minLength ? "text-green-600" : "text-gray-500"}>
-                      {passwordValidation.minLength ? "✓" : "○"} Mínimo 8 caracteres
+                    <p
+                      className={
+                        passwordValidation.minLength
+                          ? "text-green-600"
+                          : "text-gray-500"
+                      }
+                    >
+                      {passwordValidation.minLength ? "✓" : "○"} Mínimo 8
+                      caracteres
                     </p>
-                    <p className={passwordValidation.hasNumber ? "text-green-600" : "text-gray-500"}>
-                      {passwordValidation.hasNumber ? "✓" : "○"} Incluye al menos un número
+                    <p
+                      className={
+                        passwordValidation.hasNumber
+                          ? "text-green-600"
+                          : "text-gray-500"
+                      }
+                    >
+                      {passwordValidation.hasNumber ? "✓" : "○"} Incluye al
+                      menos un número
                     </p>
-                    <p className={passwordValidation.hasSymbol ? "text-green-600" : "text-gray-500"}>
-                      {passwordValidation.hasSymbol ? "✓" : "○"} Incluye al menos un símbolo (!@#$%^&*)
+                    <p
+                      className={
+                        passwordValidation.hasSymbol
+                          ? "text-green-600"
+                          : "text-gray-500"
+                      }
+                    >
+                      {passwordValidation.hasSymbol ? "✓" : "○"} Incluye al
+                      menos un símbolo (!@#$%^&*)
                     </p>
                   </div>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="register-confirm-password">Confirmar contraseña</Label>
+                <Label htmlFor="register-confirm-password">
+                  Confirmar contraseña
+                </Label>
                 <div className="relative">
                   <Input
                     id="register-confirm-password"
@@ -337,23 +441,37 @@ export function LoginRegisterForm() {
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   >
-                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
                   </button>
                 </div>
-                {registerConfirmPassword && registerPassword !== registerConfirmPassword && (
-                  <p className="text-xs text-red-600">Las contraseñas no coinciden</p>
-                )}
+                {registerConfirmPassword &&
+                  registerPassword !== registerConfirmPassword && (
+                    <p className="text-xs text-red-600">
+                      Las contraseñas no coinciden
+                    </p>
+                  )}
               </div>
 
               <p className="text-xs text-muted-foreground">
                 Al registrarte, aceptas nuestra{" "}
-                <Button type="button" variant="link" className="h-auto p-0 text-xs text-blue-600">
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto p-0 text-xs text-blue-600"
+                >
                   Política de Privacidad
                 </Button>
                 . Protegemos tus datos conforme a las normativas vigentes.
               </p>
 
-              <Button type="submit" className="w-full h-11 bg-orange-600 hover:bg-orange-700 text-white font-semibold">
+              <Button
+                type="submit"
+                className="w-full h-11 bg-orange-600 hover:bg-orange-700 text-white font-semibold"
+              >
                 Crear cuenta
               </Button>
             </form>
@@ -408,7 +526,11 @@ export function LoginRegisterForm() {
                 className="h-11 bg-transparent"
                 onClick={() => handleSocialLogin("apple")}
               >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <svg
+                  className="w-5 h-5"
+                  fill="currentColor"
+                  viewBox="0 0 24 24"
+                >
                   <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
                 </svg>
               </Button>
@@ -417,5 +539,5 @@ export function LoginRegisterForm() {
         </Tabs>
       </CardContent>
     </Card>
-  )
+  );
 }
