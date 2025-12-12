@@ -65,33 +65,31 @@ export function LoginRegisterForm() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoginError(null);
-    setLoginLoading(true);
 
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          loginEmail,
-          loginPassword,
-        }),
+        body: JSON.stringify({ loginEmail, loginPassword }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json();
+
+      console.log("🟢 Login response:", data);
 
       if (!res.ok) {
-        setLoginError(data.error || "Error al iniciar sesión");
+        alert(data.error ?? "Credenciales inválidas");
         return;
       }
 
-      // Login correcto: redirigimos
-      router.push("/");
+      const rolId = data.user.rolId;
+
+      if (rolId === 3) router.push("/admin/dashboard");
+      else if (rolId === 2) router.push("/proveedor/dashboard");
+      else router.push("/"); // cliente al home
     } catch (err) {
-      console.error(err);
-      setLoginError("Error de conexión con el servidor");
-    } finally {
-      setLoginLoading(false);
+      console.error("🔴 handleLogin error:", err);
+      alert("Error iniciando sesión");
     }
   };
 

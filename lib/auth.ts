@@ -1,63 +1,42 @@
-// lib/auth.ts
-import { pool } from "./db"; // ajusta la ruta si tu pool está en otro sitio
-import { cookies } from "next/headers";
+import { pool } from "./db";
 
 export interface SessionUser {
-  id: number;
-  email: string;
-  rol: number;                 // fk_rol es entero
-  cliente?: number | null;
-  proveedor?: number | null;
+  userId: number;
+  rolId: number;
+  clienteId: number | null;
+  proveedorId: number | null;
+  permisos: number[];
 }
 
 export async function validateCredentials(
   email: string,
   password: string
-): Promise<SessionUser | null> {
+): Promise<SessionUser> {
   const client = await pool.connect();
-
   try {
-    const result = await client.query(
-      `
-      SELECT
-        id,
-        email,
-        fk_rol       AS rol,
-        fk_cliente   AS cliente,
-        fk_proveedor AS proveedor
-      FROM public.usuario
-      WHERE email = $1
-        AND contraseña = $2
-      `,
-      [email, password]
-    );
+    console.log("🟡 validateCredentials → email:", email);
 
-    if (result.rowCount === 0) {
-      return null;
-    }
+    const result = await client.query(`SELECT * FROM inicio_sesion($1, $2)`, [
+      email,
+      password,
+    ]);
+    const row = result.rows?.[0];
 
-    const row = result.rows[0];
+    console.log("🟢 inicio_sesion row:", row);
+
+    if (!row?.user_id) throw new Error("Credenciales inválidas");
 
     return {
-      id: row.id,
-      email: row.email,
-      rol: row.rol,
-      cliente: row.cliente,
-      proveedor: row.proveedor,
+      userId: row.user_id,
+      rolId: row.rol_id,
+      clienteId: row.cliente_id ?? null,
+      proveedorId: row.proveedor_id ?? null,
+      permisos: row.permisos ?? [],
     };
+  } catch (err: any) {
+    console.error("🔴 validateCredentials error:", err?.message);
+    throw new Error("Credenciales inválidas");
   } finally {
     client.release();
-  }
-}
-
-export function getSessionUserFromCookies(): SessionUser | null {
-  const cookieStore = cookies();
-  const session = cookieStore.get("viajesucab_session")?.value;
-  if (!session) return null;
-
-  try {
-    return JSON.parse(session) as SessionUser;
-  } catch {
-    return null;
   }
 }

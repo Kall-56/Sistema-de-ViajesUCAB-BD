@@ -1,4 +1,3 @@
-// app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { validateCredentials } from "@/lib/auth";
 
@@ -8,38 +7,33 @@ export async function POST(req: NextRequest) {
 
     if (!loginEmail || !loginPassword) {
       return NextResponse.json(
-        { error: "Correo y contraseña son requeridos." },
+        { error: "Email y contraseña requeridos" },
         { status: 400 }
       );
     }
 
-    const user = await validateCredentials(loginEmail, loginPassword);
+    console.log("🟡 POST /api/auth/login:", loginEmail);
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "Credenciales inválidas." },
-        { status: 401 }
-      );
-    }
+    const sessionUser = await validateCredentials(loginEmail, loginPassword);
 
-    const response = NextResponse.json(
-      { message: "Login exitoso", user },
+    const res = NextResponse.json(
+      { ok: true, user: sessionUser },
       { status: 200 }
     );
 
-    // Guardamos el usuario en una cookie como JSON.
-    response.cookies.set("viajesucab_session", JSON.stringify(user), {
+    res.cookies.set("viajesucab_session", JSON.stringify(sessionUser), {
       httpOnly: true,
       path: "/",
-      maxAge: 60 * 60 * 8, // 8 horas
+      maxAge: 60 * 60 * 8, // 8h
+      sameSite: "lax",
     });
 
-    return response;
-  } catch (error) {
-    console.error(error);
+    console.log("🟢 Cookie creada viajesucab_session");
+    return res;
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Error interno del servidor." },
-      { status: 500 }
+      { error: err?.message ?? "Login inválido" },
+      { status: 401 }
     );
   }
 }
