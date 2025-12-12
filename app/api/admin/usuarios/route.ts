@@ -8,12 +8,8 @@ export async function GET() {
   if (!auth.ok)
     return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const { rows } = await pool.query(`
-    SELECT id, email, fk_rol, fk_cliente, fk_proveedor, activo
-    FROM usuario
-    ORDER BY id DESC
-  `);
-  return NextResponse.json({ usuarios: rows }, { status: 200 });
+  const { rows } = await pool.query(`SELECT * FROM listar_usuarios()`);
+  return NextResponse.json({ usuarios: rows });
 }
 
 // POST: crear usuario usando insertar_usuario(email, contraseña, rol, cliente, proveedor)

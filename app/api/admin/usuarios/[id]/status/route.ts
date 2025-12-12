@@ -19,9 +19,7 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
     );
   }
 
-  await pool.query(`UPDATE usuario SET activo = $1 WHERE id = $2`, [
-    activo,
-    userId,
-  ]);
+  await pool.query(`SELECT cambiar_estado_usuario($1,$2)`, [userId, activo]);
+
   return NextResponse.json({ ok: true }, { status: 200 });
 }

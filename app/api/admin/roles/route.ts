@@ -8,8 +8,8 @@ export async function GET() {
   if (!auth.ok)
     return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const { rows } = await pool.query(`SELECT id, nombre FROM rol ORDER BY id`);
-  return NextResponse.json({ roles: rows }, { status: 200 });
+  const { rows } = await pool.query(`SELECT * FROM listar_roles()`);
+  return NextResponse.json({ roles: rows });
 }
 
 // POST: crear rol usando procedure insertar_rol(nombre, ids_permiso[])
