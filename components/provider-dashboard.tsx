@@ -28,7 +28,11 @@ import {
   MapPin,
   Info,
   PlaneIcon,
+  Upload,
+  X,
+  Image as ImageIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   Card,
@@ -42,6 +46,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -141,6 +146,8 @@ export function ProviderDashboard() {
   const [c_nombreTerminal, setCNombreTerminal] = useState("");
   const [c_lugarTerminal, setCLugarTerminal] = useState<string>("");
   const [c_linksTxt, setCLinksTxt] = useState("");
+  const [c_uploadedImages, setCUploadedImages] = useState<string[]>([]);
+  const [c_uploading, setCUploading] = useState(false);
 
   // Editar
   const [editOpen, setEditOpen] = useState(false);
@@ -148,6 +155,8 @@ export function ProviderDashboard() {
   const [editId, setEditId] = useState<number | null>(null);
   const [e, setE] = useState<AerolineaDetalle | null>(null);
   const [e_linksTxt, setELinksTxt] = useState("");
+  const [e_uploadedImages, setEUploadedImages] = useState<string[]>([]);
+  const [e_uploading, setEUploading] = useState(false);
 
   const stats = useMemo(() => {
     // Stats simples basadas en cantidad
@@ -262,6 +271,72 @@ export function ProviderDashboard() {
     setCNombreTerminal("");
     setCLugarTerminal("");
     setCLinksTxt("");
+    setCUploadedImages([]);
+  }
+
+  async function handleImageUpload(file: File, isEdit: boolean = false) {
+    if (isEdit) {
+      setEUploading(true);
+    } else {
+      setCUploading(true);
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const r = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.error ?? "Error subiendo imagen");
+
+      if (isEdit) {
+        setEUploadedImages([...e_uploadedImages, data.url]);
+        setELinksTxt(
+          e_linksTxt ? `${e_linksTxt}\n${data.url}` : data.url
+        );
+      } else {
+        setCUploadedImages([...c_uploadedImages, data.url]);
+        setCLinksTxt(
+          c_linksTxt ? `${c_linksTxt}\n${data.url}` : data.url
+        );
+      }
+
+      toast.success("Imagen subida", {
+        description: "La imagen se ha subido correctamente",
+      });
+    } catch (err: any) {
+      toast.error("Error", {
+        description: err?.message ?? "No se pudo subir la imagen",
+      });
+    } finally {
+      if (isEdit) {
+        setEUploading(false);
+      } else {
+        setCUploading(false);
+      }
+    }
+  }
+
+  function removeUploadedImage(url: string, isEdit: boolean = false) {
+    if (isEdit) {
+      setEUploadedImages(e_uploadedImages.filter((img) => img !== url));
+      const links = e_linksTxt
+        .split(/[\n,]+/g)
+        .map((s) => s.trim())
+        .filter((s) => s !== url && s !== "");
+      setELinksTxt(links.join("\n"));
+    } else {
+      setCUploadedImages(c_uploadedImages.filter((img) => img !== url));
+      const links = c_linksTxt
+        .split(/[\n,]+/g)
+        .map((s) => s.trim())
+        .filter((s) => s !== url && s !== "");
+      setCLinksTxt(links.join("\n"));
+    }
   }
 
   async function onCreate() {
@@ -283,7 +358,10 @@ export function ProviderDashboard() {
         cupo: Number(c_cupo),
         nombreTerminal: c_nombreTerminal,
         lugarTerminal: lugarTerminalNum,
-        linksImagenes: parseLinks(c_linksTxt),
+        linksImagenes: [
+          ...parseLinks(c_linksTxt),
+          ...c_uploadedImages,
+        ].filter((link, index, self) => self.indexOf(link) === index), // Eliminar duplicados
       };
 
       // Validación mínima para evitar "unknown/empty"
@@ -341,11 +419,14 @@ export function ProviderDashboard() {
       if (!detalle) throw new Error("Respuesta inválida de detalle");
 
       setE(detalle);
-      setELinksTxt(
-        Array.isArray(detalle.links_imagenes)
-          ? detalle.links_imagenes.join("\n")
-          : ""
-      );
+      const links = Array.isArray(detalle.links_imagenes)
+        ? detalle.links_imagenes
+        : [];
+      // Separar URLs locales (subidas) de URLs externas
+      const uploaded = links.filter((link) => link.startsWith("/uploads/"));
+      const external = links.filter((link) => !link.startsWith("/uploads/"));
+      setEUploadedImages(uploaded);
+      setELinksTxt(external.join("\n"));
     } catch (err: any) {
       setError(err?.message ?? "Error");
     }
@@ -359,7 +440,10 @@ export function ProviderDashboard() {
     try {
       const payload = {
         ...e,
-        links_imagenes: parseLinks(e_linksTxt),
+        links_imagenes: [
+          ...parseLinks(e_linksTxt),
+          ...e_uploadedImages,
+        ].filter((link, index, self) => self.indexOf(link) === index), // Eliminar duplicados
       };
 
       // Validación mínima
@@ -390,9 +474,14 @@ export function ProviderDashboard() {
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error ?? "Error actualizando aerolínea");
 
+      toast.success("Servicio actualizado", {
+        description: "El servicio aéreo ha sido actualizado correctamente",
+      });
+
       setEditOpen(false);
       setEditId(null);
       setE(null);
+      setEUploadedImages([]);
       await fetchAerolineas();
     } catch (err: any) {
       setError(err?.message ?? "Error");
@@ -402,16 +491,21 @@ export function ProviderDashboard() {
   }
 
   async function onDelete(id: number) {
-    const ok = confirm("¿Seguro que deseas eliminar esta aerolínea?");
-    if (!ok) return;
-
     setError(null);
     try {
       const r = await fetch(`/api/aerolineas/${id}`, { method: "DELETE" });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error ?? "Error eliminando aerolínea");
+      
+      toast.success("Servicio eliminado", {
+        description: "El servicio aéreo ha sido eliminado correctamente",
+      });
+      
       await fetchAerolineas();
     } catch (err: any) {
+      toast.error("Error", {
+        description: err?.message ?? "No se pudo eliminar el servicio",
+      });
       setError(err?.message ?? "Error");
     }
   }
@@ -999,17 +1093,95 @@ export function ProviderDashboard() {
 
               <div className="space-y-2">
                 <Label htmlFor="c_linksTxt">
-                  Enlaces de Imágenes
+                  Imágenes del Servicio
                 </Label>
+                
+                {/* Subida de archivos */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleImageUpload(file, false);
+                        }
+                        // Reset input
+                        e.target.value = "";
+                      }}
+                      disabled={c_uploading}
+                      className="hidden"
+                      id="c_fileUpload"
+                    />
+                    <Label
+                      htmlFor="c_fileUpload"
+                      className="flex-1 cursor-pointer"
+                    >
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        disabled={c_uploading}
+                        asChild
+                      >
+                        <span>
+                          {c_uploading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Subiendo...
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4 mr-2" />
+                              Subir Imagen
+                            </>
+                          )}
+                        </span>
+                      </Button>
+                    </Label>
+                  </div>
+
+                  {/* Imágenes subidas */}
+                  {c_uploadedImages.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {c_uploadedImages.map((url, idx) => (
+                        <div
+                          key={idx}
+                          className="relative group aspect-video rounded-md overflow-hidden border"
+                        >
+                          <img
+                            src={url}
+                            alt={`Imagen ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="destructive"
+                            className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => removeUploadedImage(url, false)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Separator className="my-2" />
+
+                {/* Campo de texto para URLs */}
                 <Textarea
                   id="c_linksTxt"
                   value={c_linksTxt}
                   onChange={(ev) => setCLinksTxt(ev.target.value)}
-                  rows={4}
-                  placeholder="Pegue los enlaces separados por coma o línea nueva&#10;https://ejemplo.com/imagen1.jpg&#10;https://ejemplo.com/imagen2.jpg"
+                  rows={3}
+                  placeholder="O pegue URLs de imágenes separadas por coma o línea nueva&#10;https://ejemplo.com/imagen1.jpg&#10;https://ejemplo.com/imagen2.jpg"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Puede ingresar múltiples URLs separadas por coma o línea nueva
+                  Puede subir imágenes directamente o ingresar URLs de imágenes existentes
                 </p>
               </div>
             </TabsContent>
@@ -1276,17 +1448,95 @@ export function ProviderDashboard() {
 
                 <div className="space-y-2">
                   <Label htmlFor="e_linksTxt">
-                    Enlaces de Imágenes
+                    Imágenes del Servicio
                   </Label>
+                  
+                  {/* Subida de archivos */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            handleImageUpload(file, true);
+                          }
+                          // Reset input
+                          e.target.value = "";
+                        }}
+                        disabled={e_uploading}
+                        className="hidden"
+                        id="e_fileUpload"
+                      />
+                      <Label
+                        htmlFor="e_fileUpload"
+                        className="flex-1 cursor-pointer"
+                      >
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full"
+                          disabled={e_uploading}
+                          asChild
+                        >
+                          <span>
+                            {e_uploading ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Subiendo...
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="h-4 w-4 mr-2" />
+                                Subir Imagen
+                              </>
+                            )}
+                          </span>
+                        </Button>
+                      </Label>
+                    </div>
+
+                    {/* Imágenes subidas */}
+                    {e_uploadedImages.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {e_uploadedImages.map((url, idx) => (
+                          <div
+                            key={idx}
+                            className="relative group aspect-video rounded-md overflow-hidden border"
+                          >
+                            <img
+                              src={url}
+                              alt={`Imagen ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="destructive"
+                              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => removeUploadedImage(url, true)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <Separator className="my-2" />
+
+                  {/* Campo de texto para URLs */}
                   <Textarea
                     id="e_linksTxt"
                     value={e_linksTxt}
                     onChange={(ev) => setELinksTxt(ev.target.value)}
-                    rows={4}
-                    placeholder="Pegue los enlaces separados por coma o línea nueva&#10;https://ejemplo.com/imagen1.jpg&#10;https://ejemplo.com/imagen2.jpg"
+                    rows={3}
+                    placeholder="O pegue URLs de imágenes separadas por coma o línea nueva&#10;https://ejemplo.com/imagen1.jpg&#10;https://ejemplo.com/imagen2.jpg"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Puede ingresar múltiples URLs separadas por coma o línea nueva
+                    Puede subir imágenes directamente o ingresar URLs de imágenes existentes
                   </p>
                 </div>
               </TabsContent>

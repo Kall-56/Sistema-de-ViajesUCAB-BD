@@ -102,11 +102,11 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
+      <header className="sticky top-0 z-50 w-full border-b bg-white/95 dark:bg-slate-950/95 backdrop-blur-md supports-backdrop-filter:bg-white/80 dark:supports-backdrop-filter:bg-slate-950/80 shadow-sm">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-4">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2 shrink-0">
+            <Link href="/" className="flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity">
               <Image
                 src="/images/viajesucab-logo.png"
                 alt="ViajesUCAB - Tu Agencia de Confianza"
@@ -119,24 +119,24 @@ export function Header() {
 
             <form
               onSubmit={handleSearch}
-              className="hidden md:flex flex-1 max-w-md mx-4"
+              className="hidden md:flex flex-1 max-w-lg mx-4"
             >
               <div className="relative w-full">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="search"
                   placeholder="¿A dónde quieres ir?"
-                  className="w-full pl-10 pr-4 bg-muted/50"
+                  className="w-full pl-10 pr-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-950 transition-colors"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
             </form>
 
-            <nav className="hidden md:flex items-center gap-2 lg:gap-4">
+            <nav className="hidden md:flex items-center gap-1 lg:gap-2">
               <Link
                 href="/paquetes"
-                className="flex items-center gap-1.5 text-sm font-medium transition-colors hover:text-[#E91E63] whitespace-nowrap"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap"
               >
                 <Package className="h-4 w-4" />
                 <span className="hidden lg:inline">Paquetes</span>
@@ -144,28 +144,31 @@ export function Header() {
 
               <Link
                 href="/promociones"
-                className="flex items-center gap-1.5 text-sm font-medium transition-colors hover:text-[#E91E63] whitespace-nowrap"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap"
               >
                 <TrendingUp className="h-4 w-4" />
                 <span className="hidden lg:inline">Promociones</span>
               </Link>
 
               <Link
-                href="/#destinations"
-                className="flex items-center gap-1.5 text-sm font-medium transition-colors hover:text-[#E91E63] whitespace-nowrap"
+                href="/itinerario"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap"
               >
-                <MapPin className="h-4 w-4" />
-                <span className="hidden lg:inline">Destinos</span>
+                <Route className="h-4 w-4" />
+                <span className="hidden lg:inline">Mi Itinerario</span>
               </Link>
 
               {/* Perfil: solo si hay sesión; si no, lleva a login */}
               <Link
                 href={sessionUser ? "/perfil" : "/login"}
-                className="flex items-center gap-1.5 text-sm font-medium transition-colors hover:text-[#E91E63] whitespace-nowrap"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap"
               >
                 <UserCircle className="h-4 w-4" />
                 <span className="hidden lg:inline">Perfil 360°</span>
               </Link>
+
+              {/* Separador visual */}
+              <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
 
               {/* Botón Admin/Proveedor si aplica */}
               {dashboardLink && dashboardLabel && (
@@ -173,7 +176,7 @@ export function Header() {
                   asChild
                   variant="outline"
                   size="sm"
-                  className="gap-2 bg-transparent whitespace-nowrap"
+                  className="gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap"
                 >
                   <Link href={dashboardLink}>{dashboardLabel}</Link>
                 </Button>
@@ -183,11 +186,11 @@ export function Header() {
               {sessionUser ? (
                 <div className="flex items-center gap-2">
                   {userInfo && (
-                    <div className="hidden md:flex items-center gap-2 px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800">
-                      <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {userInfo.nombre}
+                    <div className="hidden lg:flex items-center gap-2 px-2 py-1 rounded-lg bg-gradient-to-r from-[#E91E63]/10 to-[#C2185B]/10 border border-[#E91E63]/20 max-w-[200px]">
+                      <span className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">
+                        {userInfo.nombre.length > 20 ? `${userInfo.nombre.substring(0, 20)}...` : userInfo.nombre}
                       </span>
-                      <Badge className="bg-[#E91E63] text-white text-xs">
+                      <Badge className="bg-[#E91E63] text-white text-xs border-0 shrink-0">
                         {userInfo.rolNombre}
                       </Badge>
                     </div>
@@ -195,7 +198,7 @@ export function Header() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-2 bg-transparent whitespace-nowrap"
+                    className="gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap"
                     onClick={handleLogout}
                   >
                     <User className="h-4 w-4" />
@@ -205,9 +208,8 @@ export function Header() {
               ) : (
                 <Button
                   asChild
-                  variant="outline"
                   size="sm"
-                  className="gap-2 bg-transparent whitespace-nowrap"
+                  className="gap-2 bg-[#E91E63] hover:bg-[#C2185B] text-white whitespace-nowrap"
                 >
                   <Link href="/login">
                     <User className="h-4 w-4" />
@@ -220,12 +222,12 @@ export function Header() {
                 asChild
                 variant="outline"
                 size="sm"
-                className="gap-2 bg-transparent relative whitespace-nowrap"
+                className="gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 relative whitespace-nowrap"
               >
                 <Link href="/carrito">
                   <ShoppingCart className="h-4 w-4" />
                   {cartItemsCount > 0 && (
-                    <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 bg-[#E91E63] text-white text-xs">
+                    <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 bg-[#E91E63] text-white text-xs border-2 border-white dark:border-slate-950">
                       {cartItemsCount}
                     </Badge>
                   )}
@@ -236,27 +238,43 @@ export function Header() {
               <LanguageCurrencySelector />
             </nav>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              className="md:hidden"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            >
-              {mobileMenuOpen ? (
-                <X className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
-              )}
-            </Button>
+            <div className="flex items-center gap-2 md:hidden">
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="relative"
+              >
+                <Link href="/carrito">
+                  <ShoppingCart className="h-5 w-5" />
+                  {cartItemsCount > 0 && (
+                    <Badge className="absolute -top-1 -right-1 h-4 w-4 flex items-center justify-center p-0 bg-[#E91E63] text-white text-xs border-2 border-white">
+                      {cartItemsCount}
+                    </Badge>
+                  )}
+                </Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              >
+                {mobileMenuOpen ? (
+                  <X className="h-6 w-6" />
+                ) : (
+                  <Menu className="h-6 w-6" />
+                )}
+              </Button>
+            </div>
           </div>
 
-          <form onSubmit={handleSearch} className="mt-3 md:hidden">
+          <form onSubmit={handleSearch} className="mt-3 md:hidden px-4">
             <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"
                 placeholder="¿A dónde quieres ir?"
-                className="w-full pl-10 pr-4"
+                className="w-full pl-10 pr-4 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -286,7 +304,7 @@ export function Header() {
             <div className="flex flex-col gap-1 p-4">
               <Link
                 href="/"
-                className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors hover:bg-accent"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <Plane className="h-5 w-5 text-[#E91E63]" />
@@ -295,7 +313,7 @@ export function Header() {
 
               <Link
                 href="/paquetes"
-                className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors hover:bg-accent"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <Package className="h-5 w-5 text-[#E91E63]" />
@@ -304,7 +322,7 @@ export function Header() {
 
               <Link
                 href="/promociones"
-                className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors hover:bg-accent"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <TrendingUp className="h-5 w-5 text-[#E91E63]" />
@@ -312,17 +330,17 @@ export function Header() {
               </Link>
 
               <Link
-                href="/#destinations"
-                className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors hover:bg-accent"
+                href="/itinerario"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <MapPin className="h-5 w-5 text-[#E91E63]" />
-                Destinos Populares
+                <Route className="h-5 w-5 text-[#E91E63]" />
+                Mi Itinerario
               </Link>
 
               <Link
                 href={sessionUser ? "/perfil" : "/login"}
-                className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors hover:bg-accent"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <UserCircle className="h-5 w-5 text-[#E91E63]" />
@@ -331,7 +349,7 @@ export function Header() {
 
               <Link
                 href="/reclamos"
-                className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors hover:bg-accent"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <MessageSquare className="h-5 w-5 text-[#E91E63]" />
@@ -340,7 +358,7 @@ export function Header() {
 
               <Link
                 href="/carrito"
-                className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors hover:bg-accent relative"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 relative"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <ShoppingCart className="h-5 w-5 text-[#E91E63]" />
@@ -350,15 +368,6 @@ export function Header() {
                     {cartItemsCount}
                   </Badge>
                 )}
-              </Link>
-
-              <Link
-                href="/itinerario"
-                className="flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors hover:bg-accent"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <Route className="h-5 w-5 text-[#E91E63]" />
-                Mi Itinerario
               </Link>
 
               {/* Botón Admin/Proveedor en móvil */}
@@ -382,17 +391,17 @@ export function Header() {
               {sessionUser ? (
                 <div className="space-y-2">
                   {userInfo && (
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-slate-100 dark:bg-slate-800">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-[#E91E63]/10 to-[#C2185B]/10 border border-[#E91E63]/20">
                       <span className="text-sm font-medium flex-1">
                         {userInfo.nombre}
                       </span>
-                      <Badge className="bg-[#E91E63] text-white text-xs">
+                      <Badge className="bg-[#E91E63] text-white text-xs border-0">
                         {userInfo.rolNombre}
                       </Badge>
                     </div>
                   )}
                   <Button
-                    className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90 justify-start gap-3"
+                    className="w-full bg-[#E91E63] hover:bg-[#C2185B] justify-start gap-3"
                     onClick={async () => {
                       setMobileMenuOpen(false);
                       await handleLogout();
@@ -405,7 +414,7 @@ export function Header() {
               ) : (
                 <Button
                   asChild
-                  className="bg-[#E91E63] hover:bg-[#E91E63]/90 justify-start gap-3"
+                  className="w-full bg-[#E91E63] hover:bg-[#C2185B] justify-start gap-3"
                 >
                   <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
                     <User className="h-5 w-5" />

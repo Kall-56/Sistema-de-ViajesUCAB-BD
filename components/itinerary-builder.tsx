@@ -1,276 +1,472 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Plane, Hotel, Ship, Car, MapPin, Calendar, Trash2, Save, Download, ArrowRight, DollarSign } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Plane,
+  Hotel,
+  Ship,
+  Car,
+  MapPin,
+  Calendar,
+  Trash2,
+  Save,
+  Download,
+  ArrowRight,
+  DollarSign,
+  Loader2,
+  AlertCircle,
+  AlertTriangle,
+  Plus,
+  Search,
+} from "lucide-react"
 
-interface ItineraryItem {
-  id: string
-  type: "flight" | "hotel" | "cruise" | "transfer" | "tour"
-  title: string
-  location: string
-  date: string
-  duration: string
-  price: number
-}
+type Servicio = {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  costo_servicio: number;
+  denominacion: string;
+  millas_otorgadas: number;
+  tipo_servicio: string;
+  lugar_nombre: string | null;
+  nombre_proveedor: string | null;
+  imagen_principal: string | null;
+};
 
-export function ItineraryBuilder() {
-  const [itineraryName, setItineraryName] = useState("Mi Viaje Personalizado")
-  const [items, setItems] = useState<ItineraryItem[]>([
-    {
-      id: "1",
-      type: "flight",
-      title: "Vuelo Caracas → Cancún",
-      location: "Cancún, México",
-      date: "2025-03-15",
-      duration: "3h 30min",
-      price: 450,
-    },
-  ])
+type ItineraryItem = {
+  id_itinerario: number;
+  id_servicio: number;
+  nombre_servicio: string;
+  costo_unitario_usd: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  tipo_servicio: string;
+};
 
-  const addItem = (type: ItineraryItem["type"]) => {
-    const newItem: ItineraryItem = {
-      id: Date.now().toString(),
-      type,
-      title: `Nuevo ${type}`,
-      location: "",
-      date: "",
-      duration: "",
-      price: 0,
+type Venta = {
+  id_venta: number;
+  monto_total: number;
+  monto_compensacion: number;
+};
+
+export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [venta, setVenta] = useState<Venta | null>(null)
+  const [items, setItems] = useState<ItineraryItem[]>([])
+  const [servicios, setServicios] = useState<Servicio[]>([])
+  const [loadingServicios, setLoadingServicios] = useState(false)
+  const [searchServicio, setSearchServicio] = useState("")
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [addingItem, setAddingItem] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [tieneFechasPasadas, setTieneFechasPasadas] = useState(false)
+
+  // Formulario para agregar servicio
+  const [selectedServicioId, setSelectedServicioId] = useState<string>("")
+  const [fechaInicio, setFechaInicio] = useState("")
+  const [fechaFin, setFechaFin] = useState("")
+  const [costoEspecial, setCostoEspecial] = useState<number | "">("")
+
+  // Cargar venta específica o crear nueva
+  useEffect(() => {
+    async function initVenta() {
+      setLoading(true)
+      setError(null)
+      try {
+        if (ventaId) {
+          // Cargar venta específica
+          const r = await fetch(`/api/cliente/ventas/${ventaId}`, { cache: "no-store" })
+          const data = await r.json()
+          if (!r.ok) {
+            if (r.status === 401 || r.status === 403) {
+              router.push("/login?next=/itinerario")
+              return
+            }
+            throw new Error(data?.error ?? "Error cargando itinerario")
+          }
+          setVenta(data.venta)
+          setItems(Array.isArray(data?.items) ? data.items : [])
+          verificarFechasPasadas(data.items)
+        } else {
+          // Redirigir a lista si no hay ventaId
+          router.push("/itinerario")
+          return
+        }
+      } catch (err: any) {
+        setError(err?.message ?? "Error inicializando itinerario")
+        if (err?.message?.includes("No autenticado") || err?.message?.includes("Cliente no identificado")) {
+          router.push("/login?next=/itinerario")
+        }
+      } finally {
+        setLoading(false)
+      }
     }
-    setItems([...items, newItem])
+
+    initVenta()
+    loadServicios()
+  }, [router, ventaId])
+
+  function verificarFechasPasadas(items: ItineraryItem[]) {
+    if (!items || items.length === 0) {
+      setTieneFechasPasadas(false)
+      return
+    }
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const tienePasadas = items.some((item) => {
+      if (!item.fecha_inicio) return false
+      const fecha = new Date(item.fecha_inicio)
+      fecha.setHours(0, 0, 0, 0)
+      return fecha < hoy
+    })
+    setTieneFechasPasadas(tienePasadas)
   }
 
-  const removeItem = (id: string) => {
-    setItems(items.filter((item) => item.id !== id))
-  }
-
-  const totalPrice = items.reduce((sum, item) => sum + item.price, 0)
-
-  const getIcon = (type: ItineraryItem["type"]) => {
-    switch (type) {
-      case "flight":
-        return <Plane className="h-5 w-5" />
-      case "hotel":
-        return <Hotel className="h-5 w-5" />
-      case "cruise":
-        return <Ship className="h-5 w-5" />
-      case "transfer":
-        return <Car className="h-5 w-5" />
-      case "tour":
-        return <MapPin className="h-5 w-5" />
+  async function loadServicios() {
+    setLoadingServicios(true)
+    try {
+      const r = await fetch("/api/cliente/servicios", { cache: "no-store" })
+      const data = await r.json()
+      if (r.ok) {
+        setServicios(Array.isArray(data?.servicios) ? data.servicios : [])
+      }
+    } catch (err) {
+      console.error("Error cargando servicios:", err)
+    } finally {
+      setLoadingServicios(false)
     }
   }
 
-  const getTypeLabel = (type: ItineraryItem["type"]) => {
-    const labels = {
-      flight: "Vuelo",
-      hotel: "Hotel",
-      cruise: "Crucero",
-      transfer: "Traslado",
-      tour: "Tour",
+  async function loadItinerario(idVenta: number) {
+    try {
+      const r = await fetch(`/api/cliente/ventas/${idVenta}`, { cache: "no-store" })
+      const data = await r.json()
+      if (r.ok) {
+        const itemsData = Array.isArray(data?.items) ? data.items : []
+        setItems(itemsData)
+        verificarFechasPasadas(itemsData)
+        if (data?.venta) {
+          setVenta(data.venta)
+        }
+      }
+    } catch (err: any) {
+      setError(err?.message ?? "Error cargando itinerario")
     }
-    return labels[type]
+  }
+
+  async function agregarServicio() {
+    if (!venta || !selectedServicioId || !fechaInicio || !fechaFin) {
+      setError("Completa todos los campos requeridos")
+      return
+    }
+
+    // Validar que las fechas no sean pasadas
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const fechaInicioDate = new Date(fechaInicio)
+    fechaInicioDate.setHours(0, 0, 0, 0)
+    
+    if (fechaInicioDate < hoy) {
+      setError("La fecha de inicio no puede ser anterior a hoy")
+      return
+    }
+
+    if (fechaFin < fechaInicio) {
+      setError("La fecha de fin debe ser posterior a la fecha de inicio")
+      return
+    }
+
+    setAddingItem(true)
+    setError(null)
+
+    try {
+      const r = await fetch("/api/cliente/itinerarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id_venta: venta.id_venta,
+          id_servicio: Number(selectedServicioId),
+          fecha_inicio: fechaInicio,
+          fecha_fin: fechaFin,
+          costo_especial: costoEspecial === "" ? null : Number(costoEspecial),
+        }),
+      })
+
+      const data = await r.json()
+      if (!r.ok) throw new Error(data?.error ?? "Error agregando servicio")
+
+      toast.success("Servicio agregado", {
+        description: "El servicio ha sido agregado a tu itinerario",
+      })
+
+      setShowAddDialog(false)
+      setSelectedServicioId("")
+      setFechaInicio("")
+      setFechaFin("")
+      setCostoEspecial("")
+      await loadItinerario(venta.id_venta)
+    } catch (err: any) {
+      toast.error("Error", {
+        description: err?.message ?? "No se pudo agregar el servicio",
+      })
+      setError(err?.message ?? "Error")
+    } finally {
+      setAddingItem(false)
+    }
+  }
+
+  async function eliminarItem(idItinerario: number) {
+    setError(null)
+    try {
+      const r = await fetch(`/api/cliente/itinerarios/${idItinerario}`, { method: "DELETE" })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data?.error ?? "Error eliminando servicio")
+
+      toast.success("Servicio eliminado", {
+        description: "El servicio ha sido eliminado del itinerario",
+      })
+
+      if (venta) {
+        await loadItinerario(venta.id_venta)
+      }
+    } catch (err: any) {
+      toast.error("Error", {
+        description: err?.message ?? "No se pudo eliminar el servicio",
+      })
+      setError(err?.message ?? "Error")
+    }
+  }
+
+  const serviciosFiltrados = useMemo(() => {
+    if (!searchServicio) return servicios
+    const search = searchServicio.toLowerCase()
+    return servicios.filter(
+      (s) =>
+        s.nombre.toLowerCase().includes(search) ||
+        s.descripcion?.toLowerCase().includes(search) ||
+        s.lugar_nombre?.toLowerCase().includes(search) ||
+        s.tipo_servicio.toLowerCase().includes(search)
+    )
+  }, [servicios, searchServicio])
+
+  const totalPrice = useMemo(() => {
+    return items.reduce((sum, item) => sum + Number(item.costo_unitario_usd || 0), 0)
+  }, [items])
+
+  const getIcon = (tipoServicio: string | null | undefined) => {
+    if (!tipoServicio) return <MapPin className="h-5 w-5" />
+    const tipo = tipoServicio.toLowerCase()
+    if (tipo.includes("aereo") || tipo.includes("vuelo")) return <Plane className="h-5 w-5" />
+    if (tipo.includes("hotel") || tipo.includes("hospedaje")) return <Hotel className="h-5 w-5" />
+    if (tipo.includes("maritimo") || tipo.includes("crucero")) return <Ship className="h-5 w-5" />
+    if (tipo.includes("terrestre") || tipo.includes("traslado")) return <Car className="h-5 w-5" />
+    return <MapPin className="h-5 w-5" />
+  }
+
+  const getTypeLabel = (tipoServicio: string | null | undefined) => {
+    if (!tipoServicio) return "Servicio"
+    const tipo = tipoServicio.toLowerCase()
+    if (tipo.includes("aereo")) return "Vuelo"
+    if (tipo.includes("hotel")) return "Hotel"
+    if (tipo.includes("maritimo")) return "Crucero"
+    if (tipo.includes("terrestre")) return "Terrestre"
+    return tipoServicio
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-muted/30 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-[#E91E63]" />
+          <p className="text-muted-foreground">Cargando constructor de itinerarios...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="bg-muted/30 min-h-screen">
+    <div className="bg-muted/30 min-h-screen overflow-x-hidden">
       {/* Hero Header */}
       <div className="bg-gradient-to-r from-[#E91E63] to-[#C2185B] text-white">
-        <div className="container mx-auto px-4 py-12">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2">Constructor de Itinerarios</h1>
-          <p className="text-white/90 text-lg">Diseña tu viaje perfecto paso a paso</p>
+        <div className="container mx-auto px-4 py-8 md:py-12">
+          <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2">Constructor de Itinerarios</h1>
+          <p className="text-white/90 text-base md:text-lg">
+            Diseña tu viaje perfecto: agrega vuelos, hoteles, cruceros y más servicios en orden cronológico
+          </p>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-6 md:py-8 max-w-7xl">
+        {/* Botón volver */}
+        <div className="mb-4">
+          <Button
+            variant="ghost"
+            onClick={() => router.push("/itinerario")}
+            className="text-muted-foreground"
+          >
+            ← Volver a mis itinerarios
+          </Button>
+        </div>
+
+        {error && (
+          <div className="mb-6 flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200">
+            <AlertCircle className="h-4 w-4" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {tieneFechasPasadas && (
+          <div className="mb-6 flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/20 p-3 rounded-lg border border-amber-200">
+            <AlertTriangle className="h-4 w-4" />
+            <span>
+              <strong>Advertencia:</strong> Este itinerario contiene servicios con fechas pasadas. 
+              Considera actualizar las fechas o eliminar estos servicios.
+            </span>
+          </div>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-12">
           {/* Main Builder */}
           <div className="lg:col-span-8 space-y-6">
-            {/* Itinerary Name */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Nombre del itinerario</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Input
-                  value={itineraryName}
-                  onChange={(e) => setItineraryName(e.target.value)}
-                  className="text-lg font-semibold"
-                  placeholder="Ej: Vacaciones en el Caribe 2025"
-                />
+            {/* Info Card */}
+            <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900">
+                    <MapPin className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold mb-1">¿Qué es un itinerario?</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Un itinerario es tu plan de viaje personalizado. Agrega servicios (vuelos, hoteles, cruceros, etc.) 
+                      en el orden que los usarás durante tu viaje. Cada servicio se guarda con sus fechas y costos, 
+                      y el sistema calcula automáticamente el total de tu viaje.
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
-            {/* Add Service Buttons */}
+            {/* Add Service Button */}
             <Card>
               <CardHeader>
                 <CardTitle>Agregar servicios</CardTitle>
-                <CardDescription>Construye tu itinerario seleccionando los servicios que necesitas</CardDescription>
+                <CardDescription>
+                  Haz clic en el botón para buscar y agregar servicios disponibles a tu itinerario
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                  <Button
-                    variant="outline"
-                    className="h-20 flex-col gap-2 bg-transparent"
-                    onClick={() => addItem("flight")}
-                  >
-                    <Plane className="h-6 w-6 text-[#E91E63]" />
-                    <span className="text-sm">Vuelo</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-20 flex-col gap-2 bg-transparent"
-                    onClick={() => addItem("hotel")}
-                  >
-                    <Hotel className="h-6 w-6 text-[#E91E63]" />
-                    <span className="text-sm">Hotel</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-20 flex-col gap-2 bg-transparent"
-                    onClick={() => addItem("cruise")}
-                  >
-                    <Ship className="h-6 w-6 text-[#E91E63]" />
-                    <span className="text-sm">Crucero</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-20 flex-col gap-2 bg-transparent"
-                    onClick={() => addItem("transfer")}
-                  >
-                    <Car className="h-6 w-6 text-[#E91E63]" />
-                    <span className="text-sm">Traslado</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-20 flex-col gap-2 bg-transparent"
-                    onClick={() => addItem("tour")}
-                  >
-                    <MapPin className="h-6 w-6 text-[#E91E63]" />
-                    <span className="text-sm">Tour</span>
-                  </Button>
-                </div>
+                <Button
+                  className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90 h-12"
+                  onClick={() => setShowAddDialog(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Agregar Servicio al Itinerario
+                </Button>
               </CardContent>
             </Card>
 
             {/* Timeline */}
             <Card>
               <CardHeader>
-                <CardTitle>Línea de tiempo del viaje</CardTitle>
-                <CardDescription>Organiza cronológicamente cada etapa de tu viaje</CardDescription>
+                <CardTitle>Tu itinerario de viaje</CardTitle>
+                <CardDescription>
+                  Los servicios aparecen ordenados por fecha de inicio. Arrastra para reorganizar (próximamente).
+                </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="overflow-visible">
                 {items.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <MapPin className="h-12 w-12 mx-auto mb-3 opacity-50" />
                     <p>No hay servicios agregados aún</p>
-                    <p className="text-sm">Comienza agregando vuelos, hoteles o tours</p>
+                    <p className="text-sm">Haz clic en "Agregar Servicio" para comenzar</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {items.map((item, index) => (
-                      <div key={item.id}>
-                        <div className="flex gap-4">
-                          {/* Timeline indicator */}
-                          <div className="flex flex-col items-center">
-                            <div className="w-10 h-10 rounded-full bg-[#E91E63] text-white flex items-center justify-center">
-                              {getIcon(item.type)}
+                    {items
+                      .sort((a, b) => {
+                        const dateA = new Date(a.fecha_inicio).getTime()
+                        const dateB = new Date(b.fecha_inicio).getTime()
+                        return dateA - dateB
+                      })
+                      .map((item, index) => (
+                        <div key={item.id_itinerario}>
+                          <div className="flex gap-4">
+                            {/* Timeline indicator */}
+                            <div className="flex flex-col items-center">
+                              <div className="w-10 h-10 rounded-full bg-[#E91E63] text-white flex items-center justify-center">
+                                {getIcon(item.tipo_servicio)}
+                              </div>
+                              {index < items.length - 1 && (
+                                <div className="w-0.5 h-full bg-gray-300 dark:bg-gray-700 my-2" />
+                              )}
                             </div>
-                            {index < items.length - 1 && (
-                              <div className="w-0.5 h-full bg-gray-300 dark:bg-gray-700 my-2" />
-                            )}
+
+                            {/* Item details */}
+                            <Card className="flex-1 min-w-0">
+                              <CardContent className="p-4">
+                                <div className="flex items-start justify-between gap-3 mb-3">
+                                  <div className="flex-1 min-w-0">
+                                    <Badge variant="secondary" className="mb-2">
+                                      {getTypeLabel(item.tipo_servicio)}
+                                    </Badge>
+                                    <h3 className="font-semibold text-base md:text-lg mb-1 break-words">
+                                      {item.nombre_servicio || "Servicio sin nombre"}
+                                    </h3>
+                                    {item.fecha_inicio && (
+                                      <p className="text-xs md:text-sm text-muted-foreground break-words">
+                                        <Calendar className="h-3 w-3 inline mr-1" />
+                                        {new Date(item.fecha_inicio).toLocaleDateString("es-ES", {
+                                          day: "numeric",
+                                          month: "short",
+                                          year: "numeric",
+                                        })}
+                                        {item.fecha_fin &&
+                                          ` - ${new Date(item.fecha_fin).toLocaleDateString("es-ES", {
+                                            day: "numeric",
+                                            month: "short",
+                                            year: "numeric",
+                                          })}`}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="text-destructive shrink-0"
+                                    onClick={() => eliminarItem(item.id_itinerario)}
+                                    title="Eliminar servicio"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+
+                                <div className="flex items-center justify-between pt-2 border-t">
+                                  <span className="text-xs md:text-sm text-muted-foreground">Costo:</span>
+                                  <span className="font-semibold text-[#E91E63] text-sm md:text-base">
+                                    {item.costo_unitario_usd?.toLocaleString("es-VE", {
+                                      style: "currency",
+                                      currency: "USD",
+                                    }) || "$0"}
+                                  </span>
+                                </div>
+                              </CardContent>
+                            </Card>
                           </div>
-
-                          {/* Item details */}
-                          <Card className="flex-1">
-                            <CardContent className="p-4">
-                              <div className="flex items-start justify-between mb-3">
-                                <div className="flex-1">
-                                  <Badge variant="secondary" className="mb-2">
-                                    {getTypeLabel(item.type)}
-                                  </Badge>
-                                  <Input
-                                    value={item.title}
-                                    onChange={(e) => {
-                                      const newItems = [...items]
-                                      newItems[index].title = e.target.value
-                                      setItems(newItems)
-                                    }}
-                                    className="font-semibold mb-2"
-                                  />
-                                </div>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="text-destructive"
-                                  onClick={() => removeItem(item.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-
-                              <div className="grid gap-3 md:grid-cols-2">
-                                <div className="space-y-2">
-                                  <Label className="text-xs">Ubicación</Label>
-                                  <Input
-                                    placeholder="Ciudad, país"
-                                    value={item.location}
-                                    onChange={(e) => {
-                                      const newItems = [...items]
-                                      newItems[index].location = e.target.value
-                                      setItems(newItems)
-                                    }}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label className="text-xs">Fecha</Label>
-                                  <Input
-                                    type="date"
-                                    value={item.date}
-                                    onChange={(e) => {
-                                      const newItems = [...items]
-                                      newItems[index].date = e.target.value
-                                      setItems(newItems)
-                                    }}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label className="text-xs">Duración</Label>
-                                  <Input
-                                    placeholder="Ej: 3 noches, 2 horas"
-                                    value={item.duration}
-                                    onChange={(e) => {
-                                      const newItems = [...items]
-                                      newItems[index].duration = e.target.value
-                                      setItems(newItems)
-                                    }}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label className="text-xs">Precio (USD)</Label>
-                                  <Input
-                                    type="number"
-                                    placeholder="0"
-                                    value={item.price || ""}
-                                    onChange={(e) => {
-                                      const newItems = [...items]
-                                      newItems[index].price = Number(e.target.value)
-                                      setItems(newItems)
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
                         </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 )}
               </CardContent>
@@ -279,7 +475,7 @@ export function ItineraryBuilder() {
 
           {/* Summary Sidebar */}
           <div className="lg:col-span-4">
-            <div className="sticky top-4 space-y-4">
+            <div className="lg:sticky lg:top-4 space-y-4">
               {/* Price Summary */}
               <Card>
                 <CardHeader>
@@ -289,20 +485,42 @@ export function ItineraryBuilder() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    {items.map((item) => (
-                      <div key={item.id} className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{getTypeLabel(item.type)}</span>
-                        <span className="font-medium">${item.price}</span>
-                      </div>
-                    ))}
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {items.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No hay servicios agregados
+                      </p>
+                    ) : (
+                      items.map((item) => (
+                        <div key={item.id_itinerario} className="flex justify-between gap-2 text-sm">
+                          <span className="text-muted-foreground truncate">
+                            {getTypeLabel(item.tipo_servicio)}
+                          </span>
+                          <span className="font-medium whitespace-nowrap shrink-0">
+                            {item.costo_unitario_usd?.toLocaleString("es-VE", {
+                              style: "currency",
+                              currency: "USD",
+                            }) || "$0"}
+                          </span>
+                        </div>
+                      ))
+                    )}
                   </div>
                   <Separator />
                   <div className="flex justify-between items-center">
                     <span className="font-semibold text-lg">Total</span>
-                    <span className="font-bold text-2xl text-[#E91E63]">${totalPrice}</span>
+                    <span className="font-bold text-2xl text-[#E91E63]">
+                      {totalPrice.toLocaleString("es-VE", {
+                        style: "currency",
+                        currency: "USD",
+                      })}
+                    </span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Precio estimado por persona</p>
+                  {venta && (
+                    <p className="text-xs text-muted-foreground">
+                      Venta #{venta.id_venta} • {items.length} servicio{items.length !== 1 ? "s" : ""}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 
@@ -319,8 +537,8 @@ export function ItineraryBuilder() {
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Destinos:</span>
-                    <span className="font-medium">{new Set(items.map((i) => i.location).filter(Boolean)).size}</span>
+                    <span className="text-muted-foreground">Servicios únicos:</span>
+                    <span className="font-medium">{new Set(items.map((i) => i.tipo_servicio).filter(Boolean)).size}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -328,18 +546,44 @@ export function ItineraryBuilder() {
               {/* Actions */}
               <Card>
                 <CardContent className="pt-6 space-y-3">
-                  <Button className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90 h-12">
-                    <ArrowRight className="h-4 w-4 mr-2" />
-                    Cotizar itinerario
+                  <Button
+                    className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90 h-12"
+                    disabled={items.length === 0 || saving}
+                    onClick={async () => {
+                      // Por ahora solo recargamos para recalcular total
+                      if (venta) {
+                        setSaving(true)
+                        await loadItinerario(venta.id_venta)
+                        toast.success("Itinerario guardado", {
+                          description: "Los cambios han sido guardados correctamente",
+                        })
+                        setSaving(false)
+                      }
+                    }}
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    {saving ? "Guardando..." : "Guardar Itinerario"}
                   </Button>
-                  <Button variant="outline" className="w-full bg-transparent">
-                    <Save className="h-4 w-4 mr-2" />
-                    Guardar borrador
-                  </Button>
-                  <Button variant="outline" className="w-full bg-transparent">
+                  <Button
+                    variant="outline"
+                    className="w-full bg-transparent"
+                    disabled={items.length === 0}
+                    onClick={() => {
+                      toast.info("Próximamente", {
+                        description: "La descarga de PDF estará disponible pronto",
+                      })
+                    }}
+                  >
                     <Download className="h-4 w-4 mr-2" />
                     Descargar PDF
                   </Button>
+                  <p className="text-xs text-center text-muted-foreground">
+                    El pago estará disponible próximamente
+                  </p>
                 </CardContent>
               </Card>
 
@@ -356,6 +600,147 @@ export function ItineraryBuilder() {
           </div>
         </div>
       </div>
+
+      {/* Dialog para agregar servicio */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Agregar Servicio al Itinerario</DialogTitle>
+            <DialogDescription>
+              Selecciona un servicio disponible y define las fechas
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Búsqueda */}
+            <div className="space-y-2">
+              <Label>Buscar servicio</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nombre, destino o tipo..."
+                  value={searchServicio}
+                  onChange={(e) => setSearchServicio(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            {/* Select de servicio */}
+            <div className="space-y-2">
+              <Label>
+                Servicio <span className="text-red-500">*</span>
+              </Label>
+              {loadingServicios ? (
+                <div className="py-4 text-center text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+                  Cargando servicios...
+                </div>
+              ) : (
+                <Select value={selectedServicioId} onValueChange={setSelectedServicioId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un servicio" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {serviciosFiltrados.map((servicio) => (
+                      <SelectItem key={servicio.id} value={String(servicio.id)}>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{servicio.nombre}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {servicio.tipo_servicio} {servicio.lugar_nombre && `• ${servicio.lugar_nombre}`}
+                            {" • "}
+                            {servicio.costo_servicio?.toLocaleString("es-VE", {
+                              style: "currency",
+                              currency: servicio.denominacion || "USD",
+                            })}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            {/* Fechas */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>
+                  Fecha de inicio <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={fechaInicio}
+                  onChange={(e) => {
+                    setFechaInicio(e.target.value)
+                    // Si la fecha fin es anterior a la nueva fecha inicio, actualizarla
+                    if (e.target.value && fechaFin && e.target.value > fechaFin) {
+                      setFechaFin("")
+                    }
+                  }}
+                  min={new Date().toISOString().split("T")[0]}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>
+                  Fecha de fin <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={fechaFin}
+                  onChange={(e) => setFechaFin(e.target.value)}
+                  min={fechaInicio || new Date().toISOString().split("T")[0]}
+                  disabled={!fechaInicio}
+                />
+              </div>
+            </div>
+
+            {/* Costo especial (opcional) */}
+            <div className="space-y-2">
+              <Label>Costo especial (opcional)</Label>
+              <Input
+                type="number"
+                placeholder="Dejar vacío para usar precio del servicio"
+                value={costoEspecial}
+                onChange={(e) =>
+                  setCostoEspecial(e.target.value === "" ? "" : Number(e.target.value))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Si se especifica, este precio reemplazará el precio del servicio
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              className="flex-1 bg-[#E91E63] hover:bg-[#E91E63]/90"
+              onClick={agregarServicio}
+              disabled={addingItem || !selectedServicioId || !fechaInicio || !fechaFin}
+            >
+              {addingItem ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4 mr-2" />
+              )}
+              Agregar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddDialog(false)
+                setSelectedServicioId("")
+                setFechaInicio("")
+                setFechaFin("")
+                setCostoEspecial("")
+              }}
+              disabled={addingItem}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
