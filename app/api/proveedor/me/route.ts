@@ -16,5 +16,13 @@ export async function GET() {
     [auth.session.proveedorId]
   );
 
-  return NextResponse.json({ proveedor: rows[0] ?? null });
+  if (!rows?.length) {
+    return NextResponse.json({ error: "Proveedor no encontrado" }, { status: 404 });
+  }
+
+  return NextResponse.json({ 
+    nombre_proveedor: rows[0].nombre_proveedor,
+    nombreProveedor: rows[0].nombre_proveedor, // Alias para compatibilidad
+    proveedor: rows[0]
+  });
 }

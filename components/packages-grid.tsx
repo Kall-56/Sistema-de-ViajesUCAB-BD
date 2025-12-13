@@ -1,14 +1,43 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Clock, MapPin, Star, Filter, X } from "lucide-react"
+import { Clock, MapPin, Star, Filter, X, Loader2 } from "lucide-react"
 import { WishlistButton } from "@/components/wishlist-button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
+
+type PaqueteAPI = {
+  id_paquete: number;
+  nombre_paquete: string;
+  descripcion_paquete: string;
+  tipo_paquete: string;
+  ids_servicios: number[] | null;
+  nombres_servicios: string[] | null;
+  restricciones: string[] | null;
+  precio_total: number;
+  millas_totales: number;
+  imagen_principal: string | null;
+  destinos: string[] | null;
+};
+
+type PaqueteDisplay = {
+  id: string;
+  name: string;
+  destination: string;
+  description: string;
+  duration: string;
+  price: number;
+  miles: number;
+  rating: number;
+  reviews: number;
+  image: string | null;
+  type: string;
+  includes: string[];
+};
 
 const allPackages = [
   {
@@ -103,13 +132,62 @@ export function PackagesGrid() {
   const [selectedType, setSelectedType] = useState<string>("all")
   const [priceRange, setPriceRange] = useState<number[]>([0, 5000])
   const [selectedDuration, setSelectedDuration] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+  const [paquetes, setPaquetes] = useState<PaqueteDisplay[]>([])
 
-  const filteredPackages = allPackages.filter((pkg) => {
-    const matchesDestination = selectedDestination === "all" || pkg.destination.includes(selectedDestination)
-    const matchesType = selectedType === "all" || pkg.type === selectedType
-    const matchesPrice = pkg.price >= priceRange[0] && pkg.price <= priceRange[1]
-    return matchesDestination && matchesType && matchesPrice
-  })
+  // Cargar paquetes desde API
+  useEffect(() => {
+    async function fetchPaquetes() {
+      setLoading(true)
+      try {
+        const r = await fetch("/api/paquetes", { cache: "no-store" })
+        if (!r.ok) throw new Error("Error cargando paquetes")
+        const data = await r.json()
+        
+        const paquetesAPI: PaqueteAPI[] = Array.isArray(data?.paquetes) ? data.paquetes : []
+        
+        // Mapear datos de API al formato del componente
+        const mapped = paquetesAPI.map((p): PaqueteDisplay => {
+          const destinos = p.destinos && p.destinos.length > 0 
+            ? p.destinos.join(", ") 
+            : "Destino no especificado"
+          
+          return {
+            id: `paquete-${p.id_paquete}`,
+            name: p.nombre_paquete,
+            destination: destinos,
+            description: p.descripcion_paquete || "Sin descripción",
+            duration: "Duración variable", // No tenemos duración en BD
+            price: p.precio_total || 0,
+            miles: p.millas_totales || 0,
+            rating: 4.5, // Placeholder
+            reviews: 0, // Placeholder
+            image: p.imagen_principal,
+            type: p.tipo_paquete,
+            includes: p.nombres_servicios || []
+          };
+        });
+        
+        setPaquetes(mapped)
+      } catch (err) {
+        console.error("Error cargando paquetes:", err)
+        setPaquetes([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchPaquetes()
+  }, [])
+
+  const filteredPackages = useMemo(() => {
+    return paquetes.filter((pkg) => {
+      const matchesDestination = selectedDestination === "all" || pkg.destination.toLowerCase().includes(selectedDestination.toLowerCase())
+      const matchesType = selectedType === "all" || pkg.type.toLowerCase().includes(selectedType.toLowerCase())
+      const matchesPrice = pkg.price >= priceRange[0] && pkg.price <= priceRange[1]
+      return matchesDestination && matchesType && matchesPrice
+    })
+  }, [paquetes, selectedDestination, selectedType, priceRange])
 
   const clearFilters = () => {
     setSelectedDestination("all")
@@ -124,7 +202,9 @@ export function PackagesGrid() {
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold md:text-3xl">Todos los Paquetes</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{filteredPackages.length} paquetes disponibles</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {loading ? "Cargando..." : `${filteredPackages.length} paquetes disponibles`}
+            </p>
           </div>
           <Button variant="outline" onClick={() => setShowFilters(!showFilters)} className="gap-2">
             <Filter className="h-4 w-4" />
@@ -208,8 +288,18 @@ export function PackagesGrid() {
           </Card>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredPackages.map((pkg) => (
+        {loading ? (
+          <div className="py-20 text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-[#E91E63]" />
+            <p className="text-muted-foreground">Cargando paquetes...</p>
+          </div>
+        ) : filteredPackages.length === 0 ? (
+          <div className="py-20 text-center">
+            <p className="text-lg text-muted-foreground">No hay paquetes disponibles en este momento</p>
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredPackages.map((pkg) => (
             <Card key={pkg.id} className="group overflow-hidden hover:shadow-lg transition-shadow">
               <div className="relative overflow-hidden">
                 <img
@@ -269,8 +359,9 @@ export function PackagesGrid() {
                 </div>
               </div>
             </Card>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )

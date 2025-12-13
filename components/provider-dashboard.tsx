@@ -10,6 +10,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Plane,
@@ -102,12 +103,16 @@ function parseLinks(text: string): string[] {
 }
 
 export function ProviderDashboard() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<
     "overview" | "services" | "availability" | "pricing"
   >("services");
 
-  // Header (nombre proveedor)
+  // Header (nombre proveedor y usuario)
   const [proveedorNombre, setProveedorNombre] = useState<string | null>(null);
+  const [userInfo, setUserInfo] = useState<{ nombre: string; email: string } | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Listado
   const [loading, setLoading] = useState(false);
@@ -170,8 +175,31 @@ export function ProviderDashboard() {
     }
   }
 
+  async function fetchUserInfo() {
+    setLoadingUser(true);
+    try {
+      const r = await fetch("/api/auth/user-info", { cache: "no-store" });
+      if (r.ok) {
+        const data = await r.json();
+        if (data?.user) {
+          setUserInfo({
+            nombre: data.user.nombre,
+            email: data.user.email,
+          });
+          // Si es proveedor, también obtener nombre del proveedor
+          if (data.user.proveedorId) {
+            await fetchProveedorNombre();
+          }
+        }
+      }
+    } catch {
+      // silencioso
+    } finally {
+      setLoadingUser(false);
+    }
+  }
+
   async function fetchProveedorNombre() {
-    // Si tienes /api/proveedor/me, úsalo para badge en header
     try {
       const r = await fetch("/api/proveedor/me", { cache: "no-store" });
       if (!r.ok) return;
@@ -182,6 +210,19 @@ export function ProviderDashboard() {
         setProveedorNombre(String(data.nombreProveedor));
     } catch {
       // silencioso
+    }
+  }
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      console.error("Error cerrando sesión:", err);
+    } finally {
+      setLoggingOut(false);
     }
   }
 
@@ -203,7 +244,7 @@ export function ProviderDashboard() {
   }
 
   useEffect(() => {
-    fetchProveedorNombre();
+    fetchUserInfo();
     fetchAerolineas();
     fetchLugares();
   }, []);
@@ -396,7 +437,27 @@ export function ProviderDashboard() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {loadingUser ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-200" />
+                  <span className="text-sm text-blue-200">Cargando...</span>
+                </div>
+              ) : (
+                <div className="text-right">
+                  <div className="flex items-center gap-2 justify-end">
+                    <p className="text-sm font-medium">
+                      {userInfo?.nombre || proveedorNombre || "Proveedor"}
+                    </p>
+                    <Badge className="bg-white/20 text-white border-white/30">
+                      Proveedor
+                    </Badge>
+                  </div>
+                  {userInfo?.email && (
+                    <p className="text-xs text-blue-200">{userInfo.email}</p>
+                  )}
+                </div>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -409,9 +470,15 @@ export function ProviderDashboard() {
                 variant="ghost"
                 size="icon"
                 className="text-white hover:bg-blue-800"
-                title="Salir"
+                title="Cerrar Sesión"
+                onClick={handleLogout}
+                disabled={loggingOut}
               >
-                <LogOut className="h-5 w-5" />
+                {loggingOut ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <LogOut className="h-5 w-5" />
+                )}
               </Button>
             </div>
           </div>

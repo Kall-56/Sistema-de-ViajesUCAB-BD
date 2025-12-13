@@ -2,40 +2,46 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { requirePermission } from "@/lib/require-admin";
 
-export async function GET(_: Request, ctx: { params: { id: string } }) {
+// GET: Obtener un rol específico con sus permisos
+export async function GET(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
   const auth = requirePermission(1);
-  if (!auth.ok) {
+  if (!auth.ok)
     return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+  const rolId = Number(params.id);
+  if (!Number.isInteger(rolId) || rolId <= 0)
+    return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM obtener_rol_permisos($1)`,
+      [rolId]
+    );
+
+    if (!rows?.length)
+      return NextResponse.json({ error: "Rol no encontrado" }, { status: 404 });
+
+    return NextResponse.json({ rol: rows[0] });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? "Error" }, { status: 500 });
   }
-
-  const rolId = Number(ctx.params.id);
-  if (Number.isNaN(rolId)) {
-    return NextResponse.json({ error: "id inválido" }, { status: 400 });
-  }
-
-  // Esto ES usar SP/función (Postgres functions se invocan con SELECT)
-  const { rows } = await pool.query(`SELECT * FROM obtener_rol_permisos($1)`, [
-    rolId,
-  ]);
-
-  if (!rows[0]) {
-    return NextResponse.json({ error: "Rol no encontrado" }, { status: 404 });
-  }
-
-  return NextResponse.json({ rol: rows[0] }, { status: 200 });
 }
 
-// PUT: actualizar nombre y permisos
-export async function PUT(req: Request, ctx: { params: { id: string } }) {
+// PUT: Actualizar nombre y permisos del rol
+export async function PUT(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
   const auth = requirePermission(3);
-  if (!auth.ok) {
+  if (!auth.ok)
     return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
 
-  const rolId = Number(ctx.params.id);
-  if (Number.isNaN(rolId)) {
-    return NextResponse.json({ error: "id inválido" }, { status: 400 });
-  }
+  const rolId = Number(params.id);
+  if (!Number.isInteger(rolId) || rolId <= 0)
+    return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
   const body = await req.json();
   const { nombre, idsPermisos } = body as {
@@ -47,44 +53,36 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
   try {
     await client.query("BEGIN");
 
-    // 1) Nombre (opcional)
-    if (typeof nombre === "string") {
-      const nuevo = nombre.trim();
-      if (nuevo.length > 0) {
-        // Opción A (segura, sin SP nuevo): UPDATE directo
-        await client.query(`SELECT actualizar_nombre_rol($1,$2)`, [
-          rolId,
-          nuevo,
-        ]);
-
-        // Opción B (100% SP): crea actualizar_nombre_rol(id, nombre) y usa:
-        // await client.query(`SELECT actualizar_nombre_rol($1,$2)`, [rolId, nuevo]);
-      }
+    // Actualizar nombre si se proporciona
+    if (typeof nombre === "string" && nombre.trim().length > 0) {
+      await client.query(`SELECT actualizar_nombre_rol($1, $2)`, [
+        rolId,
+        nombre.trim(),
+      ]);
     }
 
-    // 2) Permisos (opcional): aquí ya estás usando funciones SP
+    // Actualizar permisos si se proporcionan
     if (Array.isArray(idsPermisos)) {
-      const current = await client.query(
+      const { rows } = await client.query(
         `SELECT * FROM obtener_rol_permisos($1)`,
         [rolId]
       );
 
-      const currentIds: number[] = current.rows?.[0]?.ids_permisos ?? [];
-
+      const currentIds: number[] = rows?.[0]?.ids_permisos ?? [];
       const newSet = new Set(idsPermisos);
       const oldSet = new Set(currentIds);
 
       const toAdd = idsPermisos.filter((x) => !oldSet.has(x));
       const toRemove = currentIds.filter((x) => !newSet.has(x));
 
-      if (toAdd.length) {
+      if (toAdd.length > 0) {
         await client.query(`SELECT agregar_permisos_rol($1, $2)`, [
           rolId,
           toAdd,
         ]);
       }
 
-      if (toRemove.length) {
+      if (toRemove.length > 0) {
         await client.query(`SELECT eliminar_permisos_rol($1, $2)`, [
           rolId,
           toRemove,
@@ -93,7 +91,7 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
     }
 
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true }, { status: 200 });
+    return NextResponse.json({ ok: true });
   } catch (e: any) {
     await client.query("ROLLBACK");
     return NextResponse.json(
@@ -105,30 +103,27 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
   }
 }
 
-// DELETE: eliminar rol usando SP seguro
-export async function DELETE(_: Request, ctx: { params: { id: string } }) {
+// DELETE: Eliminar rol usando función almacenada segura
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
   const auth = requirePermission(4);
-  if (!auth.ok) {
+  if (!auth.ok)
     return NextResponse.json({ error: auth.error }, { status: auth.status });
-  }
 
-  const rolId = Number(ctx.params.id);
-  if (Number.isNaN(rolId)) {
-    return NextResponse.json({ error: "id inválido" }, { status: 400 });
-  }
+  const rolId = Number(params.id);
+  if (!Number.isInteger(rolId) || rolId <= 0)
+    return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
   try {
-    // Esto centraliza la regla en la BD:
-    // - valida usuarios asignados
-    // - borra permiso_rol
-    // - borra rol
+    // La función eliminar_rol_seguro valida usuarios asignados y elimina el rol
     await pool.query(`SELECT eliminar_rol_seguro($1)`, [rolId]);
-    return NextResponse.json({ ok: true }, { status: 200 });
+    return NextResponse.json({ ok: true });
   } catch (e: any) {
     const msg = String(e?.message ?? "");
 
-    // Si tu SP lanza excepción cuando hay usuarios asignados, lo devolvemos como 409.
-    // (Puedes ajustar la condición si tu mensaje es distinto.)
+    // Si hay usuarios asignados, retornar 409 Conflict
     if (
       msg.toLowerCase().includes("no se puede eliminar") ||
       msg.toLowerCase().includes("usuarios")

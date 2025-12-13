@@ -1,10 +1,39 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Clock, MapPin, Star, ArrowRight } from "lucide-react"
+import { Clock, MapPin, Star, ArrowRight, Loader2 } from "lucide-react"
 import { WishlistButton } from "@/components/wishlist-button"
+
+type PaqueteAPI = {
+  id_paquete: number;
+  nombre_paquete: string;
+  descripcion_paquete: string;
+  tipo_paquete: string;
+  precio_total: number;
+  millas_totales: number;
+  imagen_principal: string | null;
+  destinos: string[] | null;
+  nombres_servicios: string[] | null;
+};
+
+type PaqueteDisplay = {
+  id: string;
+  name: string;
+  destination: string;
+  description: string;
+  duration: string;
+  price: number;
+  originalPrice: number;
+  miles: number;
+  rating: number;
+  reviews: number;
+  image: string | null;
+  tag: string;
+  includes: string[];
+};
 
 const featuredPackages = [
   {
@@ -55,6 +84,58 @@ const featuredPackages = [
 ]
 
 export function FeaturedPackages() {
+  const [packages, setPackages] = useState<PaqueteDisplay[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchPaquetes() {
+      setLoading(true)
+      try {
+        const r = await fetch("/api/paquetes", { cache: "no-store" })
+        if (!r.ok) throw new Error("Error cargando paquetes")
+        const data = await r.json()
+        
+        const paquetesAPI: PaqueteAPI[] = Array.isArray(data?.paquetes) ? data.paquetes : []
+        
+        // Mapear y tomar solo las 3 primeras (ordenadas por precio)
+        const mapped = paquetesAPI
+          .sort((a, b) => (b.precio_total || 0) - (a.precio_total || 0))
+          .slice(0, 3)
+          .map((p, idx): PaqueteDisplay => {
+            const destinos = p.destinos && p.destinos.length > 0 
+              ? p.destinos.join(", ") 
+              : "Destino no especificado"
+            
+            const tags = ["Más Popular", "Mejor Valorado", "Ideal Familias"]
+            
+            return {
+              id: `paquete-${p.id_paquete}`,
+              name: p.nombre_paquete,
+              destination: destinos,
+              description: p.descripcion_paquete || "Sin descripción",
+              duration: "Duración variable",
+              price: p.precio_total || 0,
+              originalPrice: Math.round((p.precio_total || 0) * 1.3), // Simular precio original
+              miles: p.millas_totales || 0,
+              rating: 4.5 + (idx * 0.1), // Placeholder
+              reviews: 100 + (idx * 50), // Placeholder
+              image: p.imagen_principal,
+              tag: tags[idx] || "Destacado",
+              includes: p.nombres_servicios || []
+            };
+          })
+        
+        setPackages(mapped)
+      } catch (err) {
+        console.error("Error cargando paquetes:", err)
+        setPackages([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchPaquetes()
+  }, [])
   return (
     <section className="py-16 md:py-20 bg-muted/30">
       <div className="container mx-auto px-4">
@@ -69,8 +150,18 @@ export function FeaturedPackages() {
           </p>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-          {featuredPackages.map((pkg) => (
+        {loading ? (
+          <div className="py-20 text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-[#E91E63]" />
+            <p className="text-muted-foreground">Cargando paquetes...</p>
+          </div>
+        ) : packages.length === 0 ? (
+          <div className="py-20 text-center">
+            <p className="text-lg text-muted-foreground">No hay paquetes disponibles en este momento</p>
+          </div>
+        ) : (
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {packages.map((pkg) => (
             <Card key={pkg.id} className="group overflow-hidden hover:shadow-xl transition-shadow">
               <div className="relative overflow-hidden">
                 <img
@@ -135,8 +226,9 @@ export function FeaturedPackages() {
                 </div>
               </div>
             </Card>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )

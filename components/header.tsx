@@ -37,8 +37,9 @@ export function Header() {
   const router = useRouter();
 
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+  const [userInfo, setUserInfo] = useState<{ nombre: string; rolNombre: string } | null>(null);
 
-  const [searchOpen, setSearchOpen] = useState(false); // (no lo usas, pero lo dejo)
+  const [searchOpen, setSearchOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cartItemsCount] = useState(3);
   const [searchQuery, setSearchQuery] = useState("");
@@ -49,6 +50,22 @@ export function Header() {
         const res = await fetch("/api/auth/me", { method: "GET" });
         const data = await res.json();
         setSessionUser(data.user ?? null);
+        
+        // Si hay sesión, cargar información completa del usuario
+        if (data.user) {
+          try {
+            const userRes = await fetch("/api/auth/user-info", { cache: "no-store" });
+            const userData = await userRes.json();
+            if (userRes.ok && userData?.user) {
+              setUserInfo({
+                nombre: userData.user.nombre,
+                rolNombre: userData.user.rolNombre || "Usuario",
+              });
+            }
+          } catch {
+            // Silencioso
+          }
+        }
       } catch {
         setSessionUser(null);
       }
@@ -164,14 +181,27 @@ export function Header() {
 
               {/* Iniciar sesión vs Cerrar sesión */}
               {sessionUser ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 bg-transparent whitespace-nowrap"
-                  onClick={handleLogout}
-                >
-                  Cerrar Sesión
-                </Button>
+                <div className="flex items-center gap-2">
+                  {userInfo && (
+                    <div className="hidden md:flex items-center gap-2 px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800">
+                      <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {userInfo.nombre}
+                      </span>
+                      <Badge className="bg-[#E91E63] text-white text-xs">
+                        {userInfo.rolNombre}
+                      </Badge>
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 bg-transparent whitespace-nowrap"
+                    onClick={handleLogout}
+                  >
+                    <User className="h-4 w-4" />
+                    <span className="hidden lg:inline">Cerrar Sesión</span>
+                  </Button>
+                </div>
               ) : (
                 <Button
                   asChild
@@ -350,16 +380,28 @@ export function Header() {
               <div className="my-4 border-t" />
 
               {sessionUser ? (
-                <Button
-                  className="bg-[#E91E63] hover:bg-[#E91E63]/90 justify-start gap-3"
-                  onClick={async () => {
-                    setMobileMenuOpen(false);
-                    await handleLogout();
-                  }}
-                >
-                  <User className="h-5 w-5" />
-                  Cerrar Sesión
-                </Button>
+                <div className="space-y-2">
+                  {userInfo && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-slate-100 dark:bg-slate-800">
+                      <span className="text-sm font-medium flex-1">
+                        {userInfo.nombre}
+                      </span>
+                      <Badge className="bg-[#E91E63] text-white text-xs">
+                        {userInfo.rolNombre}
+                      </Badge>
+                    </div>
+                  )}
+                  <Button
+                    className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90 justify-start gap-3"
+                    onClick={async () => {
+                      setMobileMenuOpen(false);
+                      await handleLogout();
+                    }}
+                  >
+                    <User className="h-5 w-5" />
+                    Cerrar Sesión
+                  </Button>
+                </div>
               ) : (
                 <Button
                   asChild

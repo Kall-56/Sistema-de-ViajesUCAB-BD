@@ -26,8 +26,10 @@ import {
   Plug,
   FileBarChart,
   Download,
+  Loader2,
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { UserRoleManagement } from "@/components/user-role-management"
 import { PromotionManagement } from "@/components/promotion-management"
 import { ExchangeRateManagement } from "@/components/exchange-rate-management"
@@ -41,9 +43,53 @@ import { PostsaleManagement } from "@/components/postsale-management"
 import { IntegrationsManagement } from "@/components/integrations-management"
 import { ReportsAnalytics } from "@/components/reports-analytics"
 
+type UserInfo = {
+  id: number;
+  email: string;
+  rolId: number;
+  rolNombre: string;
+  nombre: string;
+  tipoUsuario: string;
+};
+
 export function AdminDashboard() {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState("overview")
   const [dateRange, setDateRange] = useState("30")
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
+  const [loadingUser, setLoadingUser] = useState(true)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  useEffect(() => {
+    async function loadUserInfo() {
+      setLoadingUser(true)
+      try {
+        const r = await fetch("/api/auth/user-info", { cache: "no-store" })
+        const data = await r.json()
+        if (r.ok && data?.user) {
+          setUserInfo(data.user)
+        }
+      } catch (err) {
+        console.error("Error cargando información del usuario:", err)
+      } finally {
+        setLoadingUser(false)
+      }
+    }
+    loadUserInfo()
+  }, [])
+
+  async function handleLogout() {
+    setLoggingOut(true)
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+      router.push("/")
+      router.refresh()
+    } catch (err) {
+      console.error("Error cerrando sesión:", err)
+    } finally {
+      setLoggingOut(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -59,13 +105,56 @@ export function AdminDashboard() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-sm font-medium">Admin Principal</p>
-                <p className="text-xs text-slate-400">admin@viajesucab.com</p>
-              </div>
-              <Button variant="ghost" size="icon" className="text-white hover:bg-slate-800">
-                <LogOut className="h-5 w-5" />
-              </Button>
+              {loadingUser ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                  <span className="text-sm text-slate-400">Cargando...</span>
+                </div>
+              ) : userInfo ? (
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="flex items-center gap-2 justify-end">
+                      <p className="text-sm font-medium">{userInfo.nombre}</p>
+                      <Badge className="bg-[#E91E63] text-white border-0">
+                        {userInfo.rolNombre || "Admin"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-slate-400">{userInfo.email}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-white hover:bg-slate-800"
+                    onClick={handleLogout}
+                    disabled={loggingOut}
+                    title="Cerrar Sesión"
+                  >
+                    {loggingOut ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <LogOut className="h-5 w-5" />
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Badge className="bg-slate-700 text-white">Admin</Badge>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-white hover:bg-slate-800"
+                    onClick={handleLogout}
+                    disabled={loggingOut}
+                    title="Cerrar Sesión"
+                  >
+                    {loggingOut ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <LogOut className="h-5 w-5" />
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>

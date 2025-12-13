@@ -2,19 +2,26 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { requirePermission } from "@/lib/require-admin";
 
-// GET: listar roles
+// GET: Listar todos los roles
 export async function GET() {
   const auth = requirePermission(1);
   if (!auth.ok)
     return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const { rows } = await pool.query(`SELECT * FROM listar_roles()`);
-  return NextResponse.json({ roles: rows });
+  try {
+    const { rows } = await pool.query(`SELECT * FROM listar_roles()`);
+    return NextResponse.json({ roles: rows });
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: e?.message ?? "Error listando roles" },
+      { status: 500 }
+    );
+  }
 }
 
-// POST: crear rol (ID autogenerado en backend)
+// POST: Crear nuevo rol (ID autogenerado en backend)
 export async function POST(req: Request) {
-  const auth = requirePermission(2); // permiso crear rol
+  const auth = requirePermission(2);
   if (!auth.ok)
     return NextResponse.json({ error: auth.error }, { status: auth.status });
 
@@ -26,7 +33,7 @@ export async function POST(req: Request) {
 
   if (!nombre || !Array.isArray(idsPermisos) || idsPermisos.length === 0) {
     return NextResponse.json(
-      { error: "nombre e idsPermisos requeridos" },
+      { error: "nombre e idsPermisos son requeridos" },
       { status: 400 }
     );
   }
@@ -35,20 +42,20 @@ export async function POST(req: Request) {
   try {
     await client.query("BEGIN");
 
-    // Bloqueo de tabla para evitar colisiones al calcular MAX(id)+1
+    // Calcular siguiente ID de forma segura
     await client.query(`LOCK TABLE rol IN EXCLUSIVE MODE`);
 
     const { rows } = await client.query<{ next_id: number }>(`
-  SELECT COALESCE(MAX(id), 0) + 1 AS next_id
-  FROM rol
-`);
+      SELECT COALESCE(MAX(id), 0) + 1 AS next_id
+      FROM rol
+    `);
 
     const nextId = rows[0].next_id;
 
-    // insertar_rol es FUNCIÓN
-    await client.query(`SELECT insertar_rol($1::int, $2::varchar, $3::int[])`, [
+    // Usar función almacenada insertar_rol
+    await client.query(`SELECT insertar_rol($1, $2, $3)`, [
       nextId,
-      nombre,
+      nombre.trim(),
       idsPermisos,
     ]);
 
