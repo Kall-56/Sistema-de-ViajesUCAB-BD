@@ -1,137 +1,130 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Clock, MapPin, Flame, ArrowRight, Filter, X, Calendar } from "lucide-react"
+import { Clock, MapPin, Flame, ArrowRight, Filter, X, Calendar, Loader2 } from "lucide-react"
 import { WishlistButton } from "@/components/wishlist-button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 
-const promotions = [
-  {
-    id: "promo-caribe-1",
-    name: "Caribe Todo Incluido",
-    destination: "Cancún, México",
-    description: "Paquete completo a Cancún con vuelo, hotel 5 estrellas y traslados",
-    discount: "30% OFF",
-    discountPercent: 30,
-    originalPrice: 1299,
-    price: 899,
-    miles: 32000,
-    validUntil: "2025-03-15",
-    daysLeft: 33,
-    savings: 400,
-    image: "/cancun-beach-resort.png",
-    type: "Aéreo",
-    isHotDeal: true,
-  },
-  {
-    id: "promo-europa-1",
-    name: "Europa Mágica",
-    destination: "París, Roma & Barcelona",
-    description: "Tour por París, Roma y Barcelona. 10 días inolvidables",
-    discount: "25% OFF",
-    discountPercent: 25,
-    originalPrice: 1999,
-    price: 1499,
-    miles: 53000,
-    validUntil: "2025-02-28",
-    daysLeft: 18,
-    savings: 500,
-    image: "/eiffel-tower-paris.png",
-    type: "Tour",
-    isHotDeal: true,
-  },
-  {
-    id: "promo-crucero-1",
-    name: "Crucero Mediterráneo",
-    destination: "Italia, Grecia & Turquía",
-    description: "Navega por las costas más hermosas del Mediterráneo",
-    discount: "40% OFF",
-    discountPercent: 40,
-    originalPrice: 2199,
-    price: 1299,
-    miles: 46000,
-    validUntil: "2025-03-31",
-    daysLeft: 49,
-    savings: 900,
-    image: "/luxury-cruise-ship-mediterranean.jpg",
-    type: "Crucero",
-    isHotDeal: true,
-  },
-  {
-    id: "promo-miami-1",
-    name: "Miami Beach Escape",
-    destination: "Miami, Florida",
-    description: "Disfruta de las playas de Miami con hotel frente al mar",
-    discount: "35% OFF",
-    discountPercent: 35,
-    originalPrice: 899,
-    price: 584,
-    miles: 21000,
-    validUntil: "2025-02-20",
-    daysLeft: 10,
-    savings: 315,
-    image: "/miami-beach-skyline.png",
-    type: "Aéreo",
-    isHotDeal: true,
-  },
-  {
-    id: "promo-argentina-1",
-    name: "Buenos Aires Cultural",
-    destination: "Buenos Aires, Argentina",
-    description: "Explora la capital del tango con tours y shows incluidos",
-    discount: "20% OFF",
-    discountPercent: 20,
-    originalPrice: 1299,
-    price: 1039,
-    miles: 37000,
-    validUntil: "2025-04-15",
-    daysLeft: 64,
-    savings: 260,
-    image: "/buenos-aires-obelisco-argentina.jpg",
-    type: "Terrestre",
-    isHotDeal: false,
-  },
-  {
-    id: "promo-rio-1",
-    name: "Río de Janeiro Carnaval",
-    destination: "Río de Janeiro, Brasil",
-    description: "Vive el carnaval más famoso del mundo con entradas VIP",
-    discount: "15% OFF",
-    discountPercent: 15,
-    originalPrice: 1599,
-    price: 1359,
-    miles: 48000,
-    validUntil: "2025-02-25",
-    daysLeft: 15,
-    savings: 240,
-    image: "/rio-christ-redeemer.png",
-    type: "Tour",
-    isHotDeal: false,
-  },
-]
+type PromocionAPI = {
+  descuento_id: number;
+  porcentaje_descuento: number;
+  fecha_vencimiento: string | null;
+  servicio_id: number;
+  servicio_nombre: string;
+  descripcion: string;
+  costo_servicio: number;
+  denominacion: string;
+  millas_otorgadas: number;
+  tipo_servicio: string;
+  lugar_nombre: string | null;
+  nombre_proveedor: string | null;
+  precio_con_descuento: number;
+  ahorro: number;
+  dias_restantes: number | null;
+  imagen_principal: string | null;
+};
+
+type PromocionDisplay = {
+  id: string;
+  name: string;
+  destination: string;
+  description: string;
+  discount: string;
+  discountPercent: number;
+  originalPrice: number;
+  price: number;
+  miles: number;
+  validUntil: string | null;
+  daysLeft: number | null;
+  savings: number;
+  image: string | null;
+  type: string;
+  isHotDeal: boolean;
+};
 
 export function PromotionsGrid() {
   const [showFilters, setShowFilters] = useState(false)
   const [selectedType, setSelectedType] = useState<string>("all")
   const [sortBy, setSortBy] = useState<string>("discount")
+  const [loading, setLoading] = useState(true)
+  const [promociones, setPromociones] = useState<PromocionDisplay[]>([])
 
-  let filteredPromotions = promotions.filter((promo) => {
-    const matchesType = selectedType === "all" || promo.type === selectedType
-    return matchesType
-  })
+  // Cargar promociones desde API
+  useEffect(() => {
+    async function fetchPromociones() {
+      setLoading(true)
+      try {
+        const r = await fetch("/api/promociones", { cache: "no-store" })
+        if (!r.ok) throw new Error("Error cargando promociones")
+        const data = await r.json()
+        
+        const promos: PromocionAPI[] = Array.isArray(data?.promociones) ? data.promociones : []
+        
+        // Mapear datos de API al formato del componente
+        const mapped = promos.map((p): PromocionDisplay => {
+          const tipoMap: Record<string, string> = {
+            aereo: "Aéreo",
+            maritimo: "Crucero",
+            terrestre: "Terrestre",
+            otro: "Otro"
+          };
+          
+          return {
+            id: `promo-${p.descuento_id}`,
+            name: p.servicio_nombre,
+            destination: p.lugar_nombre || "Destino no especificado",
+            description: p.descripcion || "Sin descripción",
+            discount: `${p.porcentaje_descuento}% OFF`,
+            discountPercent: p.porcentaje_descuento,
+            originalPrice: p.costo_servicio,
+            price: p.precio_con_descuento,
+            miles: p.millas_otorgadas,
+            validUntil: p.fecha_vencimiento,
+            daysLeft: p.dias_restantes,
+            savings: p.ahorro,
+            image: p.imagen_principal,
+            type: tipoMap[p.tipo_servicio] || p.tipo_servicio,
+            isHotDeal: p.porcentaje_descuento >= 30 // Hot deal si descuento >= 30%
+          };
+        });
+        
+        setPromociones(mapped)
+      } catch (err) {
+        console.error("Error cargando promociones:", err)
+        setPromociones([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchPromociones()
+  }, [])
 
-  // Sort promotions
-  if (sortBy === "discount") {
-    filteredPromotions = [...filteredPromotions].sort((a, b) => b.discountPercent - a.discountPercent)
-  } else if (sortBy === "price") {
-    filteredPromotions = [...filteredPromotions].sort((a, b) => a.price - b.price)
-  } else if (sortBy === "ending") {
-    filteredPromotions = [...filteredPromotions].sort((a, b) => a.daysLeft - b.daysLeft)
-  }
+  const filteredPromotions = useMemo(() => {
+    let filtered = promociones.filter((promo) => {
+      const matchesType = selectedType === "all" || promo.type === selectedType
+      return matchesType
+    })
+
+    // Sort promotions
+    if (sortBy === "discount") {
+      filtered = [...filtered].sort((a, b) => b.discountPercent - a.discountPercent)
+    } else if (sortBy === "price") {
+      filtered = [...filtered].sort((a, b) => a.price - b.price)
+    } else if (sortBy === "ending") {
+      filtered = [...filtered].sort((a, b) => {
+        const aDays = a.daysLeft ?? 999999
+        const bDays = b.daysLeft ?? 999999
+        return aDays - bDays
+      })
+    }
+
+    return filtered
+  }, [promociones, selectedType, sortBy])
 
   const clearFilters = () => {
     setSelectedType("all")
@@ -196,8 +189,18 @@ export function PromotionsGrid() {
           </Card>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredPromotions.map((promo) => (
+        {loading ? (
+          <div className="py-20 text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-[#E91E63]" />
+            <p className="text-muted-foreground">Cargando promociones...</p>
+          </div>
+        ) : filteredPromotions.length === 0 ? (
+          <div className="py-20 text-center">
+            <p className="text-lg text-muted-foreground">No hay promociones disponibles en este momento</p>
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredPromotions.map((promo) => (
             <Card key={promo.id} className="group overflow-hidden hover:shadow-xl transition-shadow">
               <div className="relative overflow-hidden">
                 <img
@@ -220,7 +223,7 @@ export function PromotionsGrid() {
                 )}
 
                 {/* Days Left Badge */}
-                {promo.daysLeft <= 15 && (
+                {promo.daysLeft !== null && promo.daysLeft <= 15 && (
                   <Badge className="absolute left-4 bottom-4 bg-red-500 text-white border-0 gap-1">
                     <Clock className="h-3 w-3" />
                     Últimos {promo.daysLeft} días
@@ -247,17 +250,25 @@ export function PromotionsGrid() {
                 <p className="mb-4 text-sm leading-relaxed text-muted-foreground line-clamp-2">{promo.description}</p>
 
                 {/* Validity Period */}
-                <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Calendar className="h-3 w-3" />
-                  <span>
-                    Válido hasta el{" "}
-                    {new Date(promo.validUntil).toLocaleDateString("es-ES", {
-                      day: "numeric",
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </span>
-                </div>
+                {promo.validUntil && (
+                  <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    <span>
+                      Válido hasta el{" "}
+                      {new Date(promo.validUntil).toLocaleDateString("es-ES", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
+                )}
+                {!promo.validUntil && (
+                  <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    <span>Promoción permanente</span>
+                  </div>
+                )}
 
                 {/* Pricing */}
                 <div className="mb-4 border-t pt-4">
@@ -290,8 +301,9 @@ export function PromotionsGrid() {
                 </div>
               </div>
             </Card>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )

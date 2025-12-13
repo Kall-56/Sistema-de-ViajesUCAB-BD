@@ -1,44 +1,77 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Percent, ArrowRight, Flame } from "lucide-react"
+import { Percent, ArrowRight, Flame, Loader2 } from "lucide-react"
 import { WishlistButton } from "@/components/wishlist-button"
 import Link from "next/link"
 
-const promotions = [
-  {
-    title: "Caribe Todo Incluido",
-    description: "Paquete completo a Cancún con vuelo, hotel 5 estrellas y traslados",
-    discount: "30% OFF",
-    originalPrice: 1299,
-    price: 899,
-    savings: 400,
-    image: "/cancun-beach-resort.png",
-    isHotDeal: true,
-  },
-  {
-    title: "Europa Mágica",
-    description: "Tour por París, Roma y Barcelona. 10 días inolvidables",
-    discount: "25% OFF",
-    originalPrice: 1999,
-    price: 1499,
-    savings: 500,
-    image: "/eiffel-tower-paris.png",
-    isHotDeal: true,
-  },
-  {
-    title: "Crucero Mediterráneo",
-    description: "Navega por las costas más hermosas del Mediterráneo",
-    discount: "40% OFF",
-    originalPrice: 2199,
-    price: 1299,
-    savings: 900,
-    image: "/luxury-cruise-ship-mediterranean.jpg",
-    isHotDeal: true,
-  },
-]
+type PromocionAPI = {
+  descuento_id: number;
+  porcentaje_descuento: number;
+  servicio_nombre: string;
+  descripcion: string;
+  costo_servicio: number;
+  precio_con_descuento: number;
+  ahorro: number;
+  imagen_principal: string | null;
+};
+
+type PromocionDisplay = {
+  id: string;
+  title: string;
+  description: string;
+  discount: string;
+  originalPrice: number;
+  price: number;
+  savings: number;
+  image: string | null;
+  isHotDeal: boolean;
+};
 
 export function PromotionsSection() {
+  const [promotions, setPromotions] = useState<PromocionDisplay[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchPromociones() {
+      setLoading(true)
+      try {
+        const r = await fetch("/api/promociones", { cache: "no-store" })
+        if (!r.ok) throw new Error("Error cargando promociones")
+        const data = await r.json()
+        
+        const promos: PromocionAPI[] = Array.isArray(data?.promociones) ? data.promociones : []
+        
+        // Mapear y tomar solo las 3 primeras (ordenadas por descuento)
+        const mapped = promos
+          .sort((a, b) => b.porcentaje_descuento - a.porcentaje_descuento)
+          .slice(0, 3)
+          .map((p): PromocionDisplay => ({
+            id: `promo-${p.descuento_id}`,
+            title: p.servicio_nombre,
+            description: p.descripcion || "Sin descripción",
+            discount: `${p.porcentaje_descuento}% OFF`,
+            originalPrice: p.costo_servicio,
+            price: p.precio_con_descuento,
+            savings: p.ahorro,
+            image: p.imagen_principal,
+            isHotDeal: p.porcentaje_descuento >= 30
+          }))
+        
+        setPromotions(mapped)
+      } catch (err) {
+        console.error("Error cargando promociones:", err)
+        setPromotions([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchPromociones()
+  }, [])
   return (
     <section id="promotions" className="py-16 md:py-24">
       <div className="container mx-auto px-4">
@@ -61,8 +94,18 @@ export function PromotionsSection() {
           </Button>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-          {promotions.map((promo, index) => (
+        {loading ? (
+          <div className="py-20 text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-[#E91E63]" />
+            <p className="text-muted-foreground">Cargando promociones...</p>
+          </div>
+        ) : promotions.length === 0 ? (
+          <div className="py-20 text-center">
+            <p className="text-lg text-muted-foreground">No hay promociones disponibles en este momento</p>
+          </div>
+        ) : (
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {promotions.map((promo, index) => (
             <Card key={index} className="group overflow-hidden hover:shadow-xl transition-shadow">
               <div className="relative overflow-hidden">
                 <img
@@ -109,8 +152,9 @@ export function PromotionsSection() {
                 </Button>
               </div>
             </Card>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-8 text-center md:hidden">
           <Button asChild variant="outline" className="w-full bg-transparent">
