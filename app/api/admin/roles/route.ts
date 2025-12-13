@@ -12,9 +12,9 @@ export async function GET() {
   return NextResponse.json({ roles: rows });
 }
 
-// POST: crear rol usando procedure insertar_rol(nombre, ids_permiso[])
+// POST: crear rol (ID autogenerado en backend)
 export async function POST(req: Request) {
-  const auth = requirePermission(2);
+  const auth = requirePermission(2); // permiso crear rol
   if (!auth.ok)
     return NextResponse.json({ error: auth.error }, { status: auth.status });
 
@@ -34,9 +34,27 @@ export async function POST(req: Request) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query(`CALL insertar_rol($1, $2)`, [nombre, idsPermisos]);
+
+    // Bloqueo de tabla para evitar colisiones al calcular MAX(id)+1
+    await client.query(`LOCK TABLE rol IN EXCLUSIVE MODE`);
+
+    const { rows } = await client.query<{ next_id: number }>(`
+  SELECT COALESCE(MAX(id), 0) + 1 AS next_id
+  FROM rol
+`);
+
+    const nextId = rows[0].next_id;
+
+    // insertar_rol es FUNCIÓN
+    await client.query(`SELECT insertar_rol($1::int, $2::varchar, $3::int[])`, [
+      nextId,
+      nombre,
+      idsPermisos,
+    ]);
+
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true }, { status: 201 });
+
+    return NextResponse.json({ ok: true, id: nextId }, { status: 201 });
   } catch (e: any) {
     await client.query("ROLLBACK");
     return NextResponse.json(
