@@ -31,9 +31,12 @@ export async function POST(req: NextRequest) {
     console.log("🟢 Cookie creada viajesucab_session");
     return res;
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message ?? "Login inválido" },
-      { status: 401 }
-    );
+    const msg = err?.message ?? "Login inválido";
+
+    // Si el mensaje viene de SQL y dice suspendido => 403
+    const lower = String(msg).toLowerCase();
+    const status = lower.includes("suspend") ? 403 : 401;
+
+    return NextResponse.json({ error: msg }, { status });
   }
 }

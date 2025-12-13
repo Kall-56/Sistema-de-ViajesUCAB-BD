@@ -41,7 +41,7 @@ type UsuarioRow = {
   fk_rol: number;
   fk_cliente: number | null;
   fk_proveedor: number | null;
-  activo: boolean;
+  activo: number;
 };
 
 export function UserRoleManagement() {
@@ -180,7 +180,7 @@ export function UserRoleManagement() {
     alert(`Usuario creado (id: ${data.id})`);
   };
 
-  const toggleActivo = async (id: number, activo: boolean) => {
+  const toggleActivo = async (id: number, activo: 0 | 1) => {
     const res = await fetch(`/api/admin/usuarios/${id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -466,7 +466,7 @@ export function UserRoleManagement() {
                         {rolName}
                       </Badge>
 
-                      {u.activo ? (
+                      {u.activo === 1 ? (
                         <Badge className="bg-green-500">
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           Activo
@@ -488,12 +488,12 @@ export function UserRoleManagement() {
                   </div>
 
                   <div className="flex gap-2">
-                    {u.activo ? (
+                    {u.activo === 1 ? (
                       <Button
                         size="sm"
                         variant="outline"
                         className="text-destructive hover:text-destructive bg-transparent"
-                        onClick={() => toggleActivo(u.id, false)}
+                        onClick={() => toggleActivo(u.id, 0)}
                       >
                         <Ban className="h-4 w-4 mr-1" />
                         Suspender
@@ -502,7 +502,7 @@ export function UserRoleManagement() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => toggleActivo(u.id, true)}
+                        onClick={() => toggleActivo(u.id, 1)}
                       >
                         <CheckCircle2 className="h-4 w-4 mr-1" />
                         Reactivar
