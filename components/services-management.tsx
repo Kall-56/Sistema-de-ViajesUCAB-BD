@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,70 +31,217 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
 
 type ServiceType = "flight" | "hotel" | "cruise" | "tour" | "transfer"
 
-interface Service {
-  id: string
-  type: ServiceType
-  name: string
-  provider: string
-  price: number
-  currency: string
-  capacity: number
-  available: number
-  status: "active" | "inactive"
+type Lugar = {
+  id: number;
+  nombre: string;
+};
+
+type AerolineaRow = {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  costo_servicio?: number;
+  denominacion?: string;
+  millas_otorgadas?: number;
+  lugar_nombre?: string;
+  nombre_proveedor?: string;
+  tipo_avion?: string;
+  numero_cupo?: number;
+  costo_compensacion?: number;
+};
+
+type AerolineaDetalle = {
+  nombre: string;
+  descripcion: string;
+  costo_servicio: number;
+  costo_compensacion: number;
+  denominacion: string;
+  millas_otorgadas: number;
+  id_lugar: number;
+  id_proveedor: number;
+  tipo_avion: string;
+  cupo: number;
+  nombre_terminal: string;
+  lugar_terminal: number;
+  links_imagenes: string[];
+};
+
+function parseLinks(text: string): string[] {
+  return text
+    .split(/[\n,]+/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 export function ServicesManagement() {
   const [activeServiceType, setActiveServiceType] = useState<ServiceType>("flight")
   const [view, setView] = useState<"list" | "create" | "edit">("list")
   const [searchTerm, setSearchTerm] = useState("")
-  const [currentPage, setCurrentPage] = useState(1)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [selectedService, setSelectedService] = useState<Service | null>(null)
+  const [selectedServiceId, setSelectedServiceId] = useState<number | null>(null)
 
-  // Mock data
-  const services: Service[] = [
-    {
-      id: "1",
-      type: "flight",
-      name: "CCS - MIA",
-      provider: "American Airlines",
-      price: 450,
-      currency: "USD",
-      capacity: 180,
-      available: 45,
-      status: "active",
-    },
-    {
-      id: "2",
-      type: "hotel",
-      name: "Hotel Caribe Paradise",
-      provider: "Marriott",
-      price: 180,
-      currency: "USD",
-      capacity: 200,
-      available: 32,
-      status: "active",
-    },
-    {
-      id: "3",
-      type: "cruise",
-      name: "Mediterráneo 10 Días",
-      provider: "Royal Caribbean",
-      price: 1200,
-      currency: "USD",
-      capacity: 2000,
-      available: 150,
-      status: "active",
-    },
-  ]
+  // Estados para datos reales
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [aerolineas, setAerolineas] = useState<AerolineaRow[]>([])
+  const [lugares, setLugares] = useState<Lugar[]>([])
+  const [loadingLugares, setLoadingLugares] = useState(false)
 
-  const filteredServices = services
-    .filter((service) => service.type === activeServiceType)
-    .filter((service) => service.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  // Estados para editar
+  const [editSubmitting, setEditSubmitting] = useState(false)
+  const [editData, setEditData] = useState<AerolineaDetalle | null>(null)
+  const [editLinksTxt, setEditLinksTxt] = useState("")
+
+  // Cargar aerolíneas
+  async function fetchAerolineas() {
+    if (activeServiceType !== "flight") return;
+    
+    setLoading(true)
+    setError(null)
+    try {
+      const r = await fetch("/api/admin/aerolineas", { cache: "no-store" })
+      const data = await r.json()
+
+      if (!r.ok) throw new Error(data?.error ?? "Error listando aerolíneas")
+      setAerolineas(Array.isArray(data?.aerolineas) ? data.aerolineas : [])
+    } catch (err: any) {
+      setError(err?.message ?? "Error")
+      setAerolineas([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Cargar lugares
+  async function fetchLugares() {
+    setLoadingLugares(true)
+    try {
+      const r = await fetch("/api/lugares", { cache: "no-store" })
+      if (!r.ok) throw new Error("Error cargando lugares")
+      const data = await r.json()
+      setLugares(Array.isArray(data?.lugares) ? data.lugares : [])
+    } catch (err: any) {
+      setError(err?.message ?? "Error cargando lugares")
+    } finally {
+      setLoadingLugares(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeServiceType === "flight") {
+      fetchAerolineas()
+    }
+  }, [activeServiceType])
+
+  useEffect(() => {
+    fetchLugares()
+  }, [])
+
+  // Filtrar aerolíneas
+  const filteredAerolineas = useMemo(() => {
+    return aerolineas.filter((a) =>
+      a.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.nombre_proveedor?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      a.lugar_nombre?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  }, [aerolineas, searchTerm])
+
+  // Abrir edición
+  async function openEdit(id: number) {
+    setError(null)
+    setEditData(null)
+    setEditLinksTxt("")
+    setSelectedServiceId(id)
+    setView("edit")
+
+    try {
+      const r = await fetch(`/api/admin/aerolineas/${id}`, { cache: "no-store" })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data?.error ?? "Error cargando aerolínea")
+
+      const detalle = data?.aerolinea as AerolineaDetalle
+      if (!detalle) throw new Error("Respuesta inválida de detalle")
+
+      setEditData(detalle)
+      setEditLinksTxt(
+        Array.isArray(detalle.links_imagenes)
+          ? detalle.links_imagenes.join("\n")
+          : ""
+      )
+    } catch (err: any) {
+      setError(err?.message ?? "Error")
+      setView("list")
+    }
+  }
+
+  // Guardar edición
+  async function onUpdate() {
+    if (!selectedServiceId || !editData) return
+    setEditSubmitting(true)
+    setError(null)
+
+    try {
+      const payload = {
+        ...editData,
+        links_imagenes: parseLinks(editLinksTxt),
+      }
+
+      if (
+        !payload.nombre ||
+        !payload.descripcion ||
+        payload.costo_servicio == null ||
+        payload.costo_compensacion == null ||
+        !payload.denominacion ||
+        payload.millas_otorgadas == null ||
+        !payload.id_lugar ||
+        !payload.tipo_avion ||
+        payload.cupo == null ||
+        !payload.nombre_terminal ||
+        !payload.lugar_terminal
+      ) {
+        throw new Error("Completa todos los campos requeridos antes de actualizar.")
+      }
+
+      const r = await fetch(`/api/admin/aerolineas/${selectedServiceId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await r.json()
+      if (!r.ok) throw new Error(data?.error ?? "Error actualizando aerolínea")
+
+      setView("list")
+      setEditData(null)
+      await fetchAerolineas()
+    } catch (err: any) {
+      setError(err?.message ?? "Error")
+    } finally {
+      setEditSubmitting(false)
+    }
+  }
+
+  // Eliminar
+  async function onDelete() {
+    if (!selectedServiceId) return
+    setError(null)
+    try {
+      const r = await fetch(`/api/admin/aerolineas/${selectedServiceId}`, { method: "DELETE" })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data?.error ?? "Error eliminando aerolínea")
+      setDeleteDialogOpen(false)
+      setSelectedServiceId(null)
+      await fetchAerolineas()
+    } catch (err: any) {
+      setError(err?.message ?? "Error")
+    }
+  }
 
   const getServiceIcon = (type: ServiceType) => {
     switch (type) {
@@ -129,65 +276,213 @@ export function ServicesManagement() {
   const renderServiceForm = () => {
     switch (activeServiceType) {
       case "flight":
+        if (view === "edit" && editData) {
+          return (
+            <div className="space-y-4">
+              {error && (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>{error}</span>
+                </div>
+              )}
+              
+              <Tabs defaultValue="basico" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="basico">Información Básica</TabsTrigger>
+                  <TabsTrigger value="vuelo">Detalles del Vuelo</TabsTrigger>
+                  <TabsTrigger value="adicional">Información Adicional</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="basico" className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="e_nombre">
+                      Nombre del Servicio <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="e_nombre"
+                      value={editData.nombre}
+                      onChange={(ev) => setEditData({ ...editData, nombre: ev.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="e_descripcion">
+                      Descripción <span className="text-red-500">*</span>
+                    </Label>
+                    <Textarea
+                      id="e_descripcion"
+                      value={editData.descripcion}
+                      onChange={(ev) => setEditData({ ...editData, descripcion: ev.target.value })}
+                      rows={4}
+                    />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="e_destino">
+                        Destino <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        value={String(editData.id_lugar)}
+                        onValueChange={(val) => setEditData({ ...editData, id_lugar: Number(val) })}
+                        disabled={loadingLugares}
+                      >
+                        <SelectTrigger id="e_destino">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {lugares.map((lugar) => (
+                            <SelectItem key={lugar.id} value={String(lugar.id)}>
+                              {lugar.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="e_denominacion">
+                        Moneda <span className="text-red-500">*</span>
+                      </Label>
+                      <Select
+                        value={editData.denominacion}
+                        onValueChange={(val) => setEditData({ ...editData, denominacion: val })}
+                      >
+                        <SelectTrigger id="e_denominacion">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="USD">USD - Dólar</SelectItem>
+                          <SelectItem value="EUR">EUR - Euro</SelectItem>
+                          <SelectItem value="VES">VES - Bolívar</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="vuelo" className="space-y-4 mt-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="e_costoServicio">
+                        Costo del Servicio <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="e_costoServicio"
+                        type="number"
+                        value={editData.costo_servicio}
+                        onChange={(ev) => setEditData({ ...editData, costo_servicio: Number(ev.target.value) })}
+                        min="0"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="e_costoCompensacion">
+                        Costo de Compensación <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="e_costoCompensacion"
+                        type="number"
+                        value={editData.costo_compensacion}
+                        onChange={(ev) => setEditData({ ...editData, costo_compensacion: Number(ev.target.value) })}
+                        min="0"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="e_millas">
+                        Millas Otorgadas <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="e_millas"
+                        type="number"
+                        value={editData.millas_otorgadas}
+                        onChange={(ev) => setEditData({ ...editData, millas_otorgadas: Number(ev.target.value) })}
+                        min="0"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="e_cupo">
+                        Capacidad (Cupos) <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="e_cupo"
+                        type="number"
+                        value={editData.cupo}
+                        onChange={(ev) => setEditData({ ...editData, cupo: Number(ev.target.value) })}
+                        min="1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="e_tipoAvion">
+                      Tipo de Aeronave <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="e_tipoAvion"
+                      value={editData.tipo_avion}
+                      onChange={(ev) => setEditData({ ...editData, tipo_avion: ev.target.value })}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="adicional" className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="e_nombreTerminal">
+                      Nombre de la Terminal <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="e_nombreTerminal"
+                      value={editData.nombre_terminal}
+                      onChange={(ev) => setEditData({ ...editData, nombre_terminal: ev.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="e_lugarTerminal">
+                      Ubicación de la Terminal <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      value={String(editData.lugar_terminal)}
+                      onValueChange={(val) => setEditData({ ...editData, lugar_terminal: Number(val) })}
+                      disabled={loadingLugares}
+                    >
+                      <SelectTrigger id="e_lugarTerminal">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {lugares.map((lugar) => (
+                          <SelectItem key={lugar.id} value={String(lugar.id)}>
+                            {lugar.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="e_linksTxt">Enlaces de Imágenes</Label>
+                    <Textarea
+                      id="e_linksTxt"
+                      value={editLinksTxt}
+                      onChange={(ev) => setEditLinksTxt(ev.target.value)}
+                      rows={4}
+                      placeholder="Pegue los enlaces separados por coma o línea nueva"
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          )
+        }
+        // Para crear (no implementado aún en admin)
         return (
           <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="airline">Aerolínea *</Label>
-                <Input id="airline" placeholder="American Airlines" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="flightNumber">Número de Vuelo *</Label>
-                <Input id="flightNumber" placeholder="AA1234" />
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="origin">Origen *</Label>
-                <Input id="origin" placeholder="CCS - Caracas" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="destination">Destino *</Label>
-                <Input id="destination" placeholder="MIA - Miami" />
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="departureDate">Fecha de Salida *</Label>
-                <Input id="departureDate" type="datetime-local" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="arrivalDate">Fecha de Llegada *</Label>
-                <Input id="arrivalDate" type="datetime-local" />
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="capacity">Capacidad *</Label>
-                <Input id="capacity" type="number" placeholder="180" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="price">Tarifa (USD) *</Label>
-                <Input id="price" type="number" placeholder="450" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="class">Clase *</Label>
-                <Select defaultValue="economy">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="economy">Económica</SelectItem>
-                    <SelectItem value="business">Ejecutiva</SelectItem>
-                    <SelectItem value="first">Primera</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="baggage">Política de Equipaje</Label>
-              <Textarea id="baggage" placeholder="1 maleta de 23kg incluida..." rows={2} />
-            </div>
+            <p className="text-sm text-muted-foreground">
+              La creación de servicios desde el admin está pendiente. Los proveedores crean los servicios.
+            </p>
           </div>
         )
       case "hotel":
@@ -438,29 +733,51 @@ export function ServicesManagement() {
           </div>
         </CardHeader>
         <CardContent>
-          <form className="space-y-6">
-            {renderServiceForm()}
-
-            <div className="space-y-2">
-              <Label htmlFor="photos">Fotos del Servicio</Label>
-              <Input id="photos" type="file" multiple accept="image/*" />
-              <p className="text-xs text-muted-foreground">Sube hasta 10 imágenes (JPG, PNG, máx. 5MB cada una)</p>
+          {view === "edit" && activeServiceType === "flight" && !editData ? (
+            <div className="py-10 text-center text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+              Cargando detalle...
             </div>
+          ) : (
+            <form 
+              className="space-y-6"
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (view === "edit" && activeServiceType === "flight") {
+                  onUpdate()
+                }
+              }}
+            >
+              {renderServiceForm()}
 
-            <div className="space-y-2">
-              <Label htmlFor="serviceDescription">Descripción Adicional</Label>
-              <Textarea id="serviceDescription" placeholder="Información adicional sobre el servicio..." rows={3} />
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <Button type="submit" className="bg-[#E91E63] hover:bg-[#C2185B]">
-                {view === "create" ? "Crear Servicio" : "Guardar Cambios"}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setView("list")}>
-                Cancelar
-              </Button>
-            </div>
-          </form>
+              {view === "edit" && activeServiceType === "flight" && (
+                <div className="flex gap-3 pt-4">
+                  <Button 
+                    type="submit" 
+                    className="bg-[#E91E63] hover:bg-[#C2185B]"
+                    disabled={editSubmitting}
+                  >
+                    {editSubmitting ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : null}
+                    Guardar Cambios
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => {
+                      setView("list")
+                      setEditData(null)
+                      setSelectedServiceId(null)
+                    }}
+                    disabled={editSubmitting}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              )}
+            </form>
+          )}
         </CardContent>
       </Card>
     )
@@ -475,12 +792,24 @@ export function ServicesManagement() {
               {getServiceIcon(activeServiceType)}
               Gestión de Servicios
             </CardTitle>
-            <CardDescription>Vuelos, hoteles, cruceros, tours y traslados</CardDescription>
+            <CardDescription>
+              {activeServiceType === "flight" 
+                ? "Administrar servicios aéreos creados por proveedores"
+                : "Vuelos, hoteles, cruceros, tours y traslados"}
+            </CardDescription>
           </div>
-          <Button onClick={() => setView("create")} className="bg-[#E91E63] hover:bg-[#C2185B]">
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo Servicio
-          </Button>
+          {activeServiceType === "flight" && (
+            <Button 
+              onClick={fetchAerolineas} 
+              variant="outline"
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Refrescar
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -508,12 +837,19 @@ export function ServicesManagement() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value={activeServiceType} className="space-y-4 mt-6">
+          <TabsContent value="flight" className="space-y-4 mt-6">
+            {error && (
+              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded">
+                <AlertCircle className="h-4 w-4" />
+                <span>{error}</span>
+              </div>
+            )}
+
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder={`Buscar ${getServiceTitle(activeServiceType).toLowerCase()}...`}
+                placeholder="Buscar vuelos por nombre, proveedor o destino..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9"
@@ -521,97 +857,94 @@ export function ServicesManagement() {
             </div>
 
             {/* Table */}
-            <div className="border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Proveedor</TableHead>
-                    <TableHead>Precio</TableHead>
-                    <TableHead>Disponibilidad</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredServices.length === 0 ? (
+            {loading ? (
+              <div className="py-10 text-center text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                Cargando aerolíneas...
+              </div>
+            ) : (
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        No se encontraron servicios
-                      </TableCell>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Proveedor</TableHead>
+                      <TableHead>Destino</TableHead>
+                      <TableHead>Precio</TableHead>
+                      <TableHead>Capacidad</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredServices.map((service) => (
-                      <TableRow key={service.id}>
-                        <TableCell className="font-medium">{service.name}</TableCell>
-                        <TableCell>{service.provider}</TableCell>
-                        <TableCell>
-                          {service.currency} ${service.price.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm">
-                              {service.available} / {service.capacity}
-                            </span>
-                            <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-[#E91E63]"
-                                style={{ width: `${(service.available / service.capacity) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={service.status === "active" ? "default" : "secondary"}
-                            className={
-                              service.status === "active" ? "bg-green-100 text-green-800 hover:bg-green-100" : ""
-                            }
-                          >
-                            {service.status === "active" ? "Activo" : "Inactivo"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setView("edit")}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-red-600 hover:text-red-700"
-                              onClick={() => {
-                                setSelectedService(service)
-                                setDeleteDialogOpen(true)
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAerolineas.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          {aerolineas.length === 0 
+                            ? "No hay servicios aéreos registrados"
+                            : "No se encontraron servicios con ese criterio de búsqueda"}
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Pagination */}
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">Mostrando {filteredServices.length} servicios</p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="sm" disabled>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+                    ) : (
+                      filteredAerolineas.map((aerolinea) => (
+                        <TableRow key={aerolinea.id}>
+                          <TableCell className="font-medium">{aerolinea.nombre}</TableCell>
+                          <TableCell>{aerolinea.nombre_proveedor || "N/A"}</TableCell>
+                          <TableCell>{aerolinea.lugar_nombre || `Lugar #${aerolinea.id}`}</TableCell>
+                          <TableCell>
+                            {aerolinea.denominacion || "USD"} ${aerolinea.costo_servicio?.toLocaleString() || "0"}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">
+                              {aerolinea.numero_cupo || 0} cupos
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8" 
+                                onClick={() => openEdit(aerolinea.id)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-red-600 hover:text-red-700"
+                                onClick={() => {
+                                  setSelectedServiceId(aerolinea.id)
+                                  setDeleteDialogOpen(true)
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
+            )}
+
+            {/* Info */}
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {filteredAerolineas.length} de {aerolineas.length} servicios
+              </p>
             </div>
           </TabsContent>
+
+          {/* Otros tipos de servicios (placeholder) */}
+          {activeServiceType !== "flight" && (
+            <TabsContent value={activeServiceType} className="space-y-4 mt-6">
+              <div className="py-10 text-center text-muted-foreground">
+                Gestión de {getServiceTitle(activeServiceType).toLowerCase()} pendiente de implementar
+              </div>
+            </TabsContent>
+          )}
         </Tabs>
       </CardContent>
 
@@ -621,20 +954,19 @@ export function ServicesManagement() {
           <DialogHeader>
             <DialogTitle>Confirmar Eliminación</DialogTitle>
             <DialogDescription>
-              ¿Estás seguro de que deseas eliminar el servicio "{selectedService?.name}"? Esta acción no se puede
-              deshacer.
+              ¿Estás seguro de que deseas eliminar este servicio aéreo? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setDeleteDialogOpen(false)
+              setSelectedServiceId(null)
+            }}>
               Cancelar
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                console.log("Deleting service:", selectedService?.name)
-                setDeleteDialogOpen(false)
-              }}
+              onClick={onDelete}
             >
               Eliminar
             </Button>

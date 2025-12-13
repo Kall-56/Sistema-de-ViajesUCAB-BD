@@ -10,6 +10,11 @@ export const metadata: Metadata = {
   title: "ViajesUCAB - Tu Agencia de Confianza",
   description: "Plataforma de reservas de viajes con 17 años de experiencia. Vuelos, hoteles, cruceros y más.",
   generator: "UCAB",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 5,
+  },
 }
 
 export default function RootLayout({
