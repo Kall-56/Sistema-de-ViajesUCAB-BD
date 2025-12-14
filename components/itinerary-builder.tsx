@@ -77,7 +77,6 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
   const [selectedServicioId, setSelectedServicioId] = useState<string>("")
   const [fechaInicio, setFechaInicio] = useState("")
   const [fechaFin, setFechaFin] = useState("")
-  const [costoEspecial, setCostoEspecial] = useState<number | "">("")
 
   // Cargar venta específica o crear nueva
   useEffect(() => {
@@ -200,7 +199,8 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
           id_servicio: Number(selectedServicioId),
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
-          costo_especial: costoEspecial === "" ? null : Number(costoEspecial),
+          // costo_especial solo puede ser establecido por admin/proveedor, nunca por cliente
+          costo_especial: null,
         }),
       })
 
@@ -215,7 +215,6 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
       setSelectedServicioId("")
       setFechaInicio("")
       setFechaFin("")
-      setCostoEspecial("")
       await loadItinerario(venta.id_venta)
     } catch (err: any) {
       toast.error("Error", {
@@ -694,22 +693,6 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
                 />
               </div>
             </div>
-
-            {/* Costo especial (opcional) */}
-            <div className="space-y-2">
-              <Label>Costo especial (opcional)</Label>
-              <Input
-                type="number"
-                placeholder="Dejar vacío para usar precio del servicio"
-                value={costoEspecial}
-                onChange={(e) =>
-                  setCostoEspecial(e.target.value === "" ? "" : Number(e.target.value))
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Si se especifica, este precio reemplazará el precio del servicio
-              </p>
-            </div>
           </div>
 
           <div className="flex gap-3 pt-4">
@@ -732,7 +715,6 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
                 setSelectedServicioId("")
                 setFechaInicio("")
                 setFechaFin("")
-                setCostoEspecial("")
               }}
               disabled={addingItem}
             >
