@@ -135,6 +135,12 @@ export function ItinerariesList() {
       toast.success("Agregado al carrito", {
         description: "El itinerario ha sido agregado a tu carrito de compras",
       })
+      
+      // Notificar al header para actualizar contador
+      window.dispatchEvent(new Event("cart-updated"))
+      
+      // Recargar lista para reflejar cambios
+      await loadVentas()
     } catch (err: any) {
       toast.error("Error", {
         description: err?.message ?? "No se pudo agregar al carrito",
@@ -152,10 +158,8 @@ export function ItinerariesList() {
     return fechaMin < hoy
   }
 
-  function estaEnCarrito(venta: Venta): boolean {
-    // TODO: Verificar si está en carrito (necesitamos implementar carrito)
-    return false
-  }
+  // Una venta está en el carrito si está pendiente y tiene items
+  // Esto se verifica automáticamente en la API del carrito
 
   function calcularTotal(venta: Venta): number {
     if (!venta.items || venta.items.length === 0) return 0
@@ -235,12 +239,11 @@ export function ItinerariesList() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {ventas.map((venta) => {
               const tienePasadas = tieneFechasPasadas(venta)
-              const enCarrito = estaEnCarrito(venta)
               const total = calcularTotal(venta)
 
               return (
                 <Card key={venta.id_venta} className="relative">
-                  {tienePasadas && !enCarrito && (
+                  {tienePasadas && (
                     <div className="absolute top-2 right-2 z-10">
                       <Badge variant="destructive" className="text-xs">
                         <AlertTriangle className="h-3 w-3 mr-1" />
@@ -291,11 +294,11 @@ export function ItinerariesList() {
                     </div>
 
                     {/* Warning si tiene fechas pasadas */}
-                    {tienePasadas && !enCarrito && (
+                    {tienePasadas && (
                       <Alert variant="destructive" className="py-2">
                         <AlertTriangle className="h-4 w-4" />
                         <AlertDescription className="text-xs">
-                          Este itinerario contiene fechas pasadas. Considera actualizarlo o eliminarlo.
+                          Este itinerario contiene fechas pasadas. No se puede agregar al carrito. Considera actualizarlo o eliminarlo.
                         </AlertDescription>
                       </Alert>
                     )}

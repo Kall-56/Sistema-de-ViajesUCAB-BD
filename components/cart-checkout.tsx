@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,79 +20,148 @@ import {
   Plane,
   Hotel,
   Ship,
+  Car,
   CreditCard,
   Shield,
   CheckCircle2,
   Wallet,
   Bitcoin,
   Award,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react"
 import Link from "next/link"
 
-interface CartItem {
-  id: string
-  type: "flight" | "hotel" | "cruise" | "package"
-  title: string
-  destination: string
-  date: string
-  passengers: number
-  price: number
-  image: string
+type ItinerarioItem = {
+  id_itinerario: number
+  id_servicio: number
+  nombre_servicio: string
+  descripcion_servicio?: string
+  costo_unitario_usd: number
+  fecha_inicio: string
+  fecha_fin: string
+  tipo_servicio: string
+  denominacion: string
+  lugar_nombre?: string
+}
+
+type VentaCarrito = {
+  id_venta: number
+  monto_total: number
+  monto_compensacion: number
+  cantidad_items: number
+  fecha_inicio_minima: string | null
+  fecha_fin_maxima: string | null
+  items: ItinerarioItem[] | null
 }
 
 export function CartCheckout() {
-  const [cartItems, setCartItems] = useState<CartItem[]>([
-    {
-      id: "1",
-      type: "package",
-      title: "Paquete Todo Incluido - Punta Cana",
-      destination: "Punta Cana, República Dominicana",
-      date: "15 Mar 2025",
-      passengers: 2,
-      price: 2450,
-      image: "beach-resort",
-    },
-    {
-      id: "2",
-      type: "hotel",
-      title: "Hotel Boutique - Cartagena",
-      destination: "Cartagena, Colombia",
-      date: "22 Mar 2025",
-      passengers: 2,
-      price: 890,
-      image: "hotel",
-    },
-  ])
-
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [ventas, setVentas] = useState<VentaCarrito[]>([])
+  const [removing, setRemoving] = useState<number | null>(null)
   const [paymentMethod, setPaymentMethod] = useState("credit-card")
   const [installments, setInstallments] = useState("1")
   const [useMiles, setUseMiles] = useState(false)
   const [milesAmount, setMilesAmount] = useState("0")
 
-  const removeItem = (id: string) => {
-    setCartItems(cartItems.filter((item) => item.id !== id))
-  }
+  useEffect(() => {
+    loadCart()
+  }, [])
 
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.passengers, 0)
-  const taxes = subtotal * 0.12 // 12% tax
-  const milesDiscount = useMiles ? Number.parseInt(milesAmount) * 0.01 : 0 // 1 cent per mile
-  const total = subtotal + taxes - milesDiscount
-
-  const getIcon = (type: CartItem["type"]) => {
-    switch (type) {
-      case "flight":
-        return <Plane className="h-5 w-5" />
-      case "hotel":
-        return <Hotel className="h-5 w-5" />
-      case "cruise":
-        return <Ship className="h-5 w-5" />
-      case "package":
-        return <MapPin className="h-5 w-5" />
+  async function loadCart() {
+    setLoading(true)
+    setError(null)
+    try {
+      const r = await fetch("/api/cliente/carrito", { cache: "no-store" })
+      const data = await r.json()
+      if (r.ok) {
+        setVentas(Array.isArray(data?.items) ? data.items : [])
+      } else {
+        if (r.status === 401 || r.status === 403) {
+          router.push("/login?next=/carrito")
+          return
+        }
+        throw new Error(data?.error ?? "Error cargando carrito")
+      }
+    } catch (err: any) {
+      setError(err?.message ?? "Error")
+      toast.error("Error", {
+        description: err?.message ?? "No se pudo cargar el carrito",
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
+  async function removeItinerario(idVenta: number) {
+    setRemoving(idVenta)
+    try {
+      const r = await fetch(`/api/cliente/ventas/${idVenta}`, { method: "DELETE" })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data?.error ?? "Error eliminando del carrito")
+
+      toast.success("Eliminado del carrito", {
+        description: "El itinerario ha sido eliminado del carrito",
+      })
+
+      await loadCart()
+      // Refrescar contador en header
+      window.dispatchEvent(new Event("cart-updated"))
+    } catch (err: any) {
+      toast.error("Error", {
+        description: err?.message ?? "No se pudo eliminar del carrito",
+      })
+    } finally {
+      setRemoving(null)
+    }
+  }
+
+  function getIcon(tipoServicio: string) {
+    const tipo = tipoServicio.toLowerCase()
+    if (tipo.includes("aereo") || tipo.includes("vuelo")) return <Plane className="h-5 w-5" />
+    if (tipo.includes("hotel") || tipo.includes("hospedaje")) return <Hotel className="h-5 w-5" />
+    if (tipo.includes("maritimo") || tipo.includes("crucero")) return <Ship className="h-5 w-5" />
+    if (tipo.includes("terrestre") || tipo.includes("traslado")) return <Car className="h-5 w-5" />
+    return <MapPin className="h-5 w-5" />
+  }
+
+  function getTypeLabel(tipoServicio: string) {
+    const tipo = tipoServicio.toLowerCase()
+    if (tipo.includes("aereo")) return "Vuelo"
+    if (tipo.includes("hotel")) return "Hotel"
+    if (tipo.includes("maritimo")) return "Crucero"
+    if (tipo.includes("terrestre")) return "Terrestre"
+    return tipoServicio
+  }
+
+  // Calcular totales
+  const totalVentas = ventas.reduce((sum, venta) => {
+    if (!venta.items || venta.items.length === 0) return sum
+    return sum + venta.items.reduce((itemSum, item) => itemSum + Number(item.costo_unitario_usd || 0), 0)
+  }, 0)
+
+  const taxes = totalVentas * 0.12 // 12% tax
+  const milesDiscount = useMiles ? Number.parseInt(milesAmount) * 0.01 : 0
+  const total = totalVentas + taxes - milesDiscount
+
+  // Contar total de servicios
+  const totalServicios = ventas.reduce((sum, venta) => sum + (venta.items?.length || 0), 0)
+
+  if (loading) {
+    return (
+      <div className="bg-muted/30 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-[#E91E63]" />
+          <p className="text-muted-foreground">Cargando carrito...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="bg-muted/30 min-h-screen">
+    <div className="bg-muted/30 min-h-screen overflow-x-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-[#E91E63] to-[#C2185B] text-white">
         <div className="container mx-auto px-4 py-8">
@@ -99,16 +170,30 @@ export function CartCheckout() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8">
-        {cartItems.length === 0 ? (
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        {error && (
+          <div className="mb-6 flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200">
+            <AlertTriangle className="h-4 w-4" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {ventas.length === 0 ? (
           <Card className="text-center py-12">
             <CardContent>
               <MapPin className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
               <h2 className="text-2xl font-semibold mb-2">Tu carrito está vacío</h2>
-              <p className="text-muted-foreground mb-6">Comienza a explorar nuestros destinos y paquetes</p>
-              <Button asChild className="bg-[#E91E63] hover:bg-[#E91E63]/90">
-                <Link href="/buscar">Explorar destinos</Link>
-              </Button>
+              <p className="text-muted-foreground mb-6">
+                Agrega itinerarios desde la página de itinerarios para comenzar
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Button asChild className="bg-[#E91E63] hover:bg-[#E91E63]/90">
+                  <Link href="/itinerario">Ver mis itinerarios</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/">Explorar destinos</Link>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ) : (
@@ -117,59 +202,105 @@ export function CartCheckout() {
             <div className="lg:col-span-7 space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Servicios seleccionados ({cartItems.length})</CardTitle>
-                  <CardDescription>Revisa los detalles de tu reserva</CardDescription>
+                  <CardTitle>
+                    Itinerarios en el carrito ({ventas.length} itinerario{ventas.length !== 1 ? "s" : ""})
+                  </CardTitle>
+                  <CardDescription>
+                    {totalServicios} servicio{totalServicios !== 1 ? "s" : ""} en total
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {cartItems.map((item) => (
-                    <div key={item.id}>
-                      <div className="flex gap-4">
-                        <div className="w-24 h-24 rounded-lg bg-gradient-to-br from-[#E91E63]/20 to-[#C2185B]/20 flex items-center justify-center shrink-0">
-                          {getIcon(item.type)}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <h3 className="font-semibold">{item.title}</h3>
-                              <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
-                                <MapPin className="h-3 w-3" />
-                                {item.destination}
-                              </p>
-                            </div>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="text-destructive"
-                              onClick={() => removeItem(item.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mb-2">
-                            <span className="flex items-center gap-1">
+                <CardContent className="space-y-6">
+                  {ventas.map((venta, ventaIdx) => (
+                    <div key={venta.id_venta}>
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h3 className="font-semibold text-lg">Itinerario #{venta.id_venta}</h3>
+                          {venta.fecha_inicio_minima && (
+                            <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
                               <Calendar className="h-3 w-3" />
-                              {item.date}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Users className="h-3 w-3" />
-                              {item.passengers} pasajero{item.passengers > 1 ? "s" : ""}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <Badge variant="secondary">
-                              {item.type === "package"
-                                ? "Paquete"
-                                : item.type === "hotel"
-                                  ? "Hotel"
-                                  : item.type === "flight"
-                                    ? "Vuelo"
-                                    : "Crucero"}
-                            </Badge>
-                            <span className="text-lg font-bold text-[#E91E63]">${item.price * item.passengers}</span>
-                          </div>
+                              {new Date(venta.fecha_inicio_minima).toLocaleDateString("es-ES", {
+                                day: "numeric",
+                                month: "long",
+                                year: "numeric",
+                              })}
+                              {venta.fecha_fin_maxima &&
+                                ` - ${new Date(venta.fecha_fin_maxima).toLocaleDateString("es-ES", {
+                                  day: "numeric",
+                                  month: "long",
+                                  year: "numeric",
+                                })}`}
+                            </p>
+                          )}
                         </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => removeItinerario(venta.id_venta)}
+                          disabled={removing === venta.id_venta}
+                          title="Eliminar del carrito"
+                        >
+                          {removing === venta.id_venta ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
                       </div>
-                      {item.id !== cartItems[cartItems.length - 1].id && <Separator className="mt-4" />}
+
+                      <div className="space-y-3">
+                        {venta.items && venta.items.length > 0 ? (
+                          venta.items.map((item, itemIdx) => (
+                            <div key={item.id_itinerario} className="flex gap-4 p-3 rounded-lg border bg-card">
+                              <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-[#E91E63]/20 to-[#C2185B]/20 flex items-center justify-center shrink-0">
+                                {getIcon(item.tipo_servicio)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex-1 min-w-0">
+                                    <h4 className="font-semibold truncate">{item.nombre_servicio}</h4>
+                                    {item.lugar_nombre && (
+                                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                        <MapPin className="h-3 w-3" />
+                                        {item.lugar_nombre}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground mb-2">
+                                  <Badge variant="secondary" className="text-xs">
+                                    {getTypeLabel(item.tipo_servicio)}
+                                  </Badge>
+                                  {item.fecha_inicio && (
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      {new Date(item.fecha_inicio).toLocaleDateString("es-ES", {
+                                        day: "numeric",
+                                        month: "short",
+                                      })}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-muted-foreground">Costo:</span>
+                                  <span className="font-bold text-[#E91E63]">
+                                    {Number(item.costo_unitario_usd || 0).toLocaleString("es-VE", {
+                                      style: "currency",
+                                      currency: item.denominacion || "USD",
+                                    })}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-muted-foreground text-center py-4">
+                            No hay servicios en este itinerario
+                          </p>
+                        )}
+                      </div>
+
+                      {ventaIdx < ventas.length - 1 && <Separator className="my-6" />}
                     </div>
                   ))}
                 </CardContent>
@@ -184,7 +315,6 @@ export function CartCheckout() {
                 <CardContent className="space-y-6">
                   <RadioGroup value={paymentMethod} onValueChange={setPaymentMethod}>
                     <div className="space-y-3">
-                      {/* Credit/Debit Card */}
                       <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-accent transition-colors">
                         <RadioGroupItem value="credit-card" />
                         <CreditCard className="h-5 w-5 text-[#E91E63]" />
@@ -194,7 +324,6 @@ export function CartCheckout() {
                         </div>
                       </label>
 
-                      {/* Zelle */}
                       <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-accent transition-colors">
                         <RadioGroupItem value="zelle" />
                         <Wallet className="h-5 w-5 text-[#E91E63]" />
@@ -204,7 +333,6 @@ export function CartCheckout() {
                         </div>
                       </label>
 
-                      {/* PayPal */}
                       <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-accent transition-colors">
                         <RadioGroupItem value="paypal" />
                         <Wallet className="h-5 w-5 text-[#E91E63]" />
@@ -214,7 +342,6 @@ export function CartCheckout() {
                         </div>
                       </label>
 
-                      {/* Crypto */}
                       <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-accent transition-colors">
                         <RadioGroupItem value="crypto" />
                         <Bitcoin className="h-5 w-5 text-[#E91E63]" />
@@ -224,7 +351,6 @@ export function CartCheckout() {
                         </div>
                       </label>
 
-                      {/* Bank Transfer */}
                       <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-accent transition-colors">
                         <RadioGroupItem value="bank-transfer" />
                         <Wallet className="h-5 w-5 text-[#E91E63]" />
@@ -236,7 +362,6 @@ export function CartCheckout() {
                     </div>
                   </RadioGroup>
 
-                  {/* Credit Card Form */}
                   {paymentMethod === "credit-card" && (
                     <div className="space-y-4 pt-4 border-t">
                       <div className="grid gap-4 md:grid-cols-2">
@@ -258,7 +383,6 @@ export function CartCheckout() {
                         </div>
                       </div>
 
-                      {/* Installments */}
                       <div className="space-y-2">
                         <Label>Cuotas</Label>
                         <Select value={installments} onValueChange={setInstallments}>
@@ -276,7 +400,6 @@ export function CartCheckout() {
                     </div>
                   )}
 
-                  {/* Combine Payment Methods */}
                   <div className="pt-4 border-t">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <Checkbox />
@@ -323,7 +446,7 @@ export function CartCheckout() {
 
             {/* Summary Sidebar */}
             <div className="lg:col-span-5">
-              <div className="sticky top-4 space-y-4">
+              <div className="lg:sticky lg:top-4 space-y-4">
                 {/* Price Summary */}
                 <Card>
                   <CardHeader>
@@ -333,26 +456,50 @@ export function CartCheckout() {
                     <div className="space-y-3">
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Subtotal</span>
-                        <span className="font-medium">${subtotal.toFixed(2)}</span>
+                        <span className="font-medium">
+                          {totalVentas.toLocaleString("es-VE", {
+                            style: "currency",
+                            currency: "USD",
+                          })}
+                        </span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Impuestos y tasas (12%)</span>
-                        <span className="font-medium">${taxes.toFixed(2)}</span>
+                        <span className="font-medium">
+                          {taxes.toLocaleString("es-VE", {
+                            style: "currency",
+                            currency: "USD",
+                          })}
+                        </span>
                       </div>
                       {useMiles && milesDiscount > 0 && (
                         <div className="flex justify-between text-sm text-green-600">
                           <span>Descuento por millas</span>
-                          <span className="font-medium">-${milesDiscount.toFixed(2)}</span>
+                          <span className="font-medium">
+                            -{milesDiscount.toLocaleString("es-VE", {
+                              style: "currency",
+                              currency: "USD",
+                            })}
+                          </span>
                         </div>
                       )}
                       <Separator />
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-lg">Total a pagar</span>
-                        <span className="text-3xl font-bold text-[#E91E63]">${total.toFixed(2)}</span>
+                        <span className="text-3xl font-bold text-[#E91E63]">
+                          {total.toLocaleString("es-VE", {
+                            style: "currency",
+                            currency: "USD",
+                          })}
+                        </span>
                       </div>
                       {installments !== "1" && (
                         <p className="text-xs text-muted-foreground">
-                          {installments} cuotas de ${(total / Number.parseInt(installments)).toFixed(2)}
+                          {installments} cuotas de{" "}
+                          {(total / Number.parseInt(installments)).toLocaleString("es-VE", {
+                            style: "currency",
+                            currency: "USD",
+                          })}
                         </p>
                       )}
                     </div>
@@ -360,7 +507,14 @@ export function CartCheckout() {
                     <Separator />
 
                     {/* Confirm Button */}
-                    <Button className="w-full h-12 bg-[#E91E63] hover:bg-[#E91E63]/90 text-lg">
+                    <Button
+                      className="w-full h-12 bg-[#E91E63] hover:bg-[#E91E63]/90 text-lg"
+                      onClick={() => {
+                        toast.info("Próximamente", {
+                          description: "La funcionalidad de pago estará disponible pronto",
+                        })
+                      }}
+                    >
                       <CheckCircle2 className="h-5 w-5 mr-2" />
                       Confirmar y pagar
                     </Button>

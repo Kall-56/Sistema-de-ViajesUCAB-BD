@@ -41,7 +41,7 @@ export function Header() {
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [cartItemsCount] = useState(3);
+  const [cartItemsCount, setCartItemsCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -70,7 +70,36 @@ export function Header() {
         setSessionUser(null);
       }
     };
+
+    const loadCartCount = async () => {
+      try {
+        const res = await fetch("/api/cliente/carrito/count", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setCartItemsCount(data?.count || 0);
+        }
+      } catch {
+        // Silencioso
+      }
+    };
+
     loadSession();
+    // Solo cargar conteo si hay sesión de cliente
+    loadCartCount();
+
+    // Escuchar eventos de actualización del carrito
+    const handleCartUpdate = () => {
+      loadCartCount();
+    };
+    window.addEventListener("cart-updated", handleCartUpdate);
+
+    // Refrescar cada 30 segundos
+    const interval = setInterval(loadCartCount, 30000);
+
+    return () => {
+      window.removeEventListener("cart-updated", handleCartUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleSearch = (e?: React.FormEvent) => {

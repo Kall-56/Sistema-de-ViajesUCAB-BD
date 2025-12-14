@@ -22,16 +22,34 @@ export async function GET() {
   }
 
   try {
-    // Obtener ventas pendientes que están "en carrito" (marcadas para pago)
-    // Por ahora, consideramos que una venta pendiente con items está en carrito
+    // Obtener ventas pendientes que están "en carrito" (ventas pendientes con items)
     const { rows } = await pool.query(
       `
       SELECT
         v.id_venta,
         v.monto_total,
+        v.monto_compensacion,
         (SELECT COUNT(*) FROM itinerario i WHERE i.fk_venta = v.id_venta) AS cantidad_items,
         (SELECT MIN(i.fecha_hora_inicio) FROM itinerario i WHERE i.fk_venta = v.id_venta) AS fecha_inicio_minima,
-        (SELECT MAX(i.fecha_hora_fin) FROM itinerario i WHERE i.fk_venta = v.id_venta) AS fecha_fin_maxima
+        (SELECT MAX(i.fecha_hora_fin) FROM itinerario i WHERE i.fk_venta = v.id_venta) AS fecha_fin_maxima,
+        (SELECT array_agg(
+          json_build_object(
+            'id_itinerario', i.id,
+            'id_servicio', i.fk_servicio,
+            'nombre_servicio', s.nombre,
+            'descripcion_servicio', s.descripcion,
+            'costo_unitario_usd', COALESCE(i.costo_especial, s.costo_servicio),
+            'fecha_inicio', i.fecha_hora_inicio,
+            'fecha_fin', i.fecha_hora_fin,
+            'tipo_servicio', s.tipo_servicio,
+            'denominacion', s.denominacion,
+            'lugar_nombre', l.nombre
+          )
+        )
+        FROM itinerario i
+        JOIN servicio s ON s.id = i.fk_servicio
+        LEFT JOIN lugar l ON l.id = s.fk_lugar
+        WHERE i.fk_venta = v.id_venta) AS items
       FROM venta v
       WHERE v.fk_cliente = $1
         AND EXISTS (
