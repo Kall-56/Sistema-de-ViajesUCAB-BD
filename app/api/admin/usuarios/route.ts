@@ -2,13 +2,36 @@ import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 import { requirePermission } from "@/lib/require-admin";
 
-// GET: listar usuarios (incluye activo)
+// GET: listar usuarios (incluye activo) con información de cliente/proveedor
 export async function GET() {
   const auth = requirePermission(1);
   if (!auth.ok)
     return NextResponse.json({ error: auth.error }, { status: auth.status });
 
-  const { rows } = await pool.query(`SELECT * FROM listar_usuarios()`);
+  // Usar query con JOINs para obtener nombres de cliente/proveedor
+  const { rows } = await pool.query(`
+    SELECT
+      u.id,
+      u.email,
+      u.fk_rol,
+      u.fk_cliente,
+      u.fk_proveedor,
+      u.activo,
+      r.nombre AS rol_nombre,
+      CASE
+        WHEN u.fk_cliente IS NOT NULL THEN
+          CONCAT(c.nombre_1, ' ', COALESCE(c.nombre_2, ''), ' ', c.apellido_1, ' ', COALESCE(c.apellido_2, ''))
+        WHEN u.fk_proveedor IS NOT NULL THEN
+          p.nombre_proveedor
+        ELSE
+          NULL
+      END AS nombre_asociado
+    FROM usuario u
+    LEFT JOIN rol r ON r.id = u.fk_rol
+    LEFT JOIN cliente c ON c.id = u.fk_cliente
+    LEFT JOIN proveedor p ON p.id = u.fk_proveedor
+    ORDER BY u.id DESC
+  `);
   return NextResponse.json({ usuarios: rows });
 }
 

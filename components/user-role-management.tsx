@@ -42,6 +42,8 @@ type UsuarioRow = {
   fk_cliente: number | null;
   fk_proveedor: number | null;
   activo: number;
+  rol_nombre?: string;
+  nombre_asociado?: string | null;
 };
 
 export function UserRoleManagement() {
@@ -481,10 +483,19 @@ export function UserRoleManagement() {
 
                     <p className="text-sm text-muted-foreground">{u.email}</p>
 
-                    <p className="text-xs text-muted-foreground mt-1">
-                      fk_cliente: {u.fk_cliente ?? "null"} | fk_proveedor:{" "}
-                      {u.fk_proveedor ?? "null"}
-                    </p>
+                    {u.nombre_asociado && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {u.fk_cliente ? "Cliente: " : u.fk_proveedor ? "Proveedor: " : ""}
+                        <span className="font-medium">{u.nombre_asociado}</span>
+                      </p>
+                    )}
+                    
+                    {!u.nombre_asociado && (u.fk_cliente || u.fk_proveedor) && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {u.fk_cliente ? `Cliente ID: ${u.fk_cliente}` : ""}
+                        {u.fk_proveedor ? `Proveedor ID: ${u.fk_proveedor}` : ""}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex gap-2">

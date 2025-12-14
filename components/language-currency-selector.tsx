@@ -55,11 +55,11 @@ export function LanguageCurrencySelector() {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1 lg:gap-2 shrink-0">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-2">
-            <Globe className="h-4 w-4" />
+          <Button variant="ghost" size="sm" className="gap-1 lg:gap-2 shrink-0">
+            <Globe className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">{selectedLanguage.flag}</span>
             <span className="hidden xl:inline">{selectedLanguage.code.toUpperCase()}</span>
           </Button>
@@ -83,8 +83,8 @@ export function LanguageCurrencySelector() {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="gap-2">
-            <DollarSign className="h-4 w-4" />
+          <Button variant="ghost" size="sm" className="gap-1 lg:gap-2 shrink-0">
+            <DollarSign className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">{selectedCurrency.code}</span>
           </Button>
         </DropdownMenuTrigger>

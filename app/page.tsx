@@ -11,9 +11,9 @@ import { OnboardingProvider } from "@/components/onboarding-provider"
 export default function HomePage() {
   return (
     <OnboardingProvider>
-      <div className="min-h-screen">
+      <div className="min-h-screen overflow-x-hidden">
         <Header />
-        <main>
+        <main className="overflow-x-hidden">
           <HeroCarousel />
 
           <DestinationsSection />

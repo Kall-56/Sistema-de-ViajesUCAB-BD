@@ -131,9 +131,9 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full border-b bg-white/95 dark:bg-slate-950/95 backdrop-blur-md supports-backdrop-filter:bg-white/80 dark:supports-backdrop-filter:bg-slate-950/80 shadow-sm">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-50 w-full border-b bg-white/95 dark:bg-slate-950/95 backdrop-blur-md supports-backdrop-filter:bg-white/80 dark:supports-backdrop-filter:bg-slate-950/80 shadow-sm overflow-x-hidden">
+        <div className="container mx-auto px-4 py-3 max-w-full">
+          <div className="flex items-center justify-between gap-2 md:gap-4 min-w-0">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity">
               <Image
@@ -148,9 +148,9 @@ export function Header() {
 
             <form
               onSubmit={handleSearch}
-              className="hidden md:flex flex-1 max-w-lg mx-4"
+              className="hidden md:flex flex-1 max-w-lg mx-2 lg:mx-4 min-w-0"
             >
-              <div className="relative w-full">
+              <div className="relative w-full min-w-0">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="search"
@@ -162,7 +162,7 @@ export function Header() {
               </div>
             </form>
 
-            <nav className="hidden md:flex items-center gap-1 lg:gap-2">
+            <nav className="hidden md:flex items-center gap-1 lg:gap-2 shrink-0">
               <Link
                 href="/paquetes"
                 className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap"
@@ -213,11 +213,11 @@ export function Header() {
 
               {/* Iniciar sesión vs Cerrar sesión */}
               {sessionUser ? (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 lg:gap-2 shrink-0">
                   {userInfo && (
-                    <div className="hidden lg:flex items-center gap-2 px-2 py-1 rounded-lg bg-gradient-to-r from-[#E91E63]/10 to-[#C2185B]/10 border border-[#E91E63]/20 max-w-[200px]">
+                    <div className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gradient-to-r from-[#E91E63]/10 to-[#C2185B]/10 border border-[#E91E63]/20 max-w-[180px] min-w-0">
                       <span className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">
-                        {userInfo.nombre.length > 20 ? `${userInfo.nombre.substring(0, 20)}...` : userInfo.nombre}
+                        {userInfo.nombre.length > 15 ? `${userInfo.nombre.substring(0, 15)}...` : userInfo.nombre}
                       </span>
                       <Badge className="bg-[#E91E63] text-white text-xs border-0 shrink-0">
                         {userInfo.rolNombre}
@@ -227,11 +227,11 @@ export function Header() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap"
+                    className="gap-1.5 lg:gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap shrink-0"
                     onClick={handleLogout}
                   >
-                    <User className="h-4 w-4" />
-                    <span className="hidden lg:inline">Cerrar Sesión</span>
+                    <User className="h-4 w-4 shrink-0" />
+                    <span className="hidden xl:inline">Cerrar Sesión</span>
                   </Button>
                 </div>
               ) : (
@@ -251,10 +251,10 @@ export function Header() {
                 asChild
                 variant="outline"
                 size="sm"
-                className="gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 relative whitespace-nowrap"
+                className="gap-1.5 lg:gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 relative whitespace-nowrap shrink-0"
               >
                 <Link href="/carrito">
-                  <ShoppingCart className="h-4 w-4" />
+                  <ShoppingCart className="h-4 w-4 shrink-0" />
                   {cartItemsCount > 0 && (
                     <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 bg-[#E91E63] text-white text-xs border-2 border-white dark:border-slate-950">
                       {cartItemsCount}
@@ -264,7 +264,9 @@ export function Header() {
                 </Link>
               </Button>
 
-              <LanguageCurrencySelector />
+              <div className="shrink-0">
+                <LanguageCurrencySelector />
+              </div>
             </nav>
 
             <div className="flex items-center gap-2 md:hidden">

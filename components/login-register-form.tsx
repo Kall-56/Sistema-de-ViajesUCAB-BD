@@ -24,7 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Eye, EyeOff, Plane } from "lucide-react";
+import { Eye, EyeOff, Plane, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export function LoginRegisterForm() {
   const router = useRouter();
@@ -40,13 +41,19 @@ export function LoginRegisterForm() {
   const [loginLoading, setLoginLoading] = useState(false);
 
   // Register form state
-  const [registerName, setRegisterName] = useState("");
+  const [registerNombre1, setRegisterNombre1] = useState("");
+  const [registerNombre2, setRegisterNombre2] = useState("");
+  const [registerApellido1, setRegisterApellido1] = useState("");
+  const [registerApellido2, setRegisterApellido2] = useState("");
+  const [registerCI, setRegisterCI] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
   const [registerPhone, setRegisterPhone] = useState("");
+  const [registerDireccion, setRegisterDireccion] = useState("");
+  const [registerEstadoCivil, setRegisterEstadoCivil] = useState("");
   const [registerBirthdate, setRegisterBirthdate] = useState("");
-  const [registerCountry, setRegisterCountry] = useState("");
+  const [registerLoading, setRegisterLoading] = useState(false);
 
   // Password validation
   const validatePassword = (password: string) => {
@@ -93,24 +100,207 @@ export function LoginRegisterForm() {
     }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validaciones de campos requeridos
+    if (!registerNombre1?.trim()) {
+      toast.error("Error de validación", {
+        description: "El primer nombre es requerido",
+      });
+      return;
+    }
+
+    if (!registerApellido1?.trim()) {
+      toast.error("Error de validación", {
+        description: "El primer apellido es requerido",
+      });
+      return;
+    }
+
+    if (!registerCI?.trim()) {
+      toast.error("Error de validación", {
+        description: "La cédula de identidad es requerida",
+      });
+      return;
+    }
+
+    // Validar cédula (debe ser número positivo)
+    const ciNumber = Number(registerCI.trim());
+    if (!Number.isInteger(ciNumber) || ciNumber <= 0 || ciNumber.toString().length < 6) {
+      toast.error("Error de validación", {
+        description: "La cédula debe ser un número válido de al menos 6 dígitos",
+      });
+      return;
+    }
+
+    if (!registerEmail?.trim()) {
+      toast.error("Error de validación", {
+        description: "El correo electrónico es requerido",
+      });
+      return;
+    }
+
+    // Validar formato de email
+    const emailRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}$/i;
+    if (!emailRegex.test(registerEmail.trim())) {
+      toast.error("Error de validación", {
+        description: "Ingresa un correo electrónico válido",
+      });
+      return;
+    }
+
+    if (!registerPhone?.trim()) {
+      toast.error("Error de validación", {
+        description: "El teléfono es requerido",
+      });
+      return;
+    }
+
+    // Validar teléfono (debe tener al menos 10 dígitos)
+    const phoneNumber = registerPhone.replace(/\D/g, ""); // Remover caracteres no numéricos
+    if (!phoneNumber || phoneNumber.length < 10) {
+      toast.error("Error de validación", {
+        description: "Ingresa un número de teléfono válido (mínimo 10 dígitos)",
+      });
+      return;
+    }
+
+    if (!registerDireccion?.trim()) {
+      toast.error("Error de validación", {
+        description: "La dirección es requerida",
+      });
+      return;
+    }
+
+    if (registerDireccion.trim().length < 10) {
+      toast.error("Error de validación", {
+        description: "La dirección debe tener al menos 10 caracteres",
+      });
+      return;
+    }
+
+    if (!registerEstadoCivil) {
+      toast.error("Error de validación", {
+        description: "El estado civil es requerido",
+      });
+      return;
+    }
+
+    if (!registerBirthdate) {
+      toast.error("Error de validación", {
+        description: "La fecha de nacimiento es requerida",
+      });
+      return;
+    }
+
+    // Validar edad (mayor de 18)
+    const fechaNac = new Date(registerBirthdate);
+    const hoy = new Date();
+    let edad = hoy.getFullYear() - fechaNac.getFullYear();
+    const mes = hoy.getMonth() - fechaNac.getMonth();
+    if (mes < 0 || (mes === 0 && hoy.getDate() < fechaNac.getDate())) {
+      edad--;
+    }
+    
+    if (edad < 18) {
+      toast.error("Error de validación", {
+        description: "Debes ser mayor de 18 años para registrarte",
+      });
+      return;
+    }
+
+    // Validar que la fecha no sea futura
+    if (fechaNac > hoy) {
+      toast.error("Error de validación", {
+        description: "La fecha de nacimiento no puede ser futura",
+      });
+      return;
+    }
+
+    // Validaciones de contraseña
+    if (!registerPassword) {
+      toast.error("Error de validación", {
+        description: "La contraseña es requerida",
+      });
+      return;
+    }
+
     if (registerPassword !== registerConfirmPassword) {
-      alert("Las contraseñas no coinciden");
+      toast.error("Error de validación", {
+        description: "Las contraseñas no coinciden",
+      });
       return;
     }
+    
     if (!passwordValidation.isValid) {
-      alert("La contraseña no cumple con los requisitos de seguridad");
+      toast.error("Error de validación", {
+        description: "La contraseña no cumple con los requisitos de seguridad",
+      });
       return;
     }
-    console.log("Register attempt:", {
-      registerName,
-      registerEmail,
-      registerPhone,
-      registerBirthdate,
-      registerCountry,
-    });
-    // Add registration logic here
+
+    setRegisterLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: registerEmail.trim(),
+          contraseña: registerPassword,
+          nombre_1: registerNombre1.trim(),
+          nombre_2: registerNombre2.trim() || null,
+          apellido_1: registerApellido1.trim(),
+          apellido_2: registerApellido2.trim() || null,
+          c_i: ciNumber,
+          telefonos: [phoneNumber], // Enviar como string, se convierte a bigint en el backend
+          direccion: registerDireccion.trim(),
+          estado_civil: registerEstadoCivil,
+          fecha_nacimiento: registerBirthdate,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error("Error en el registro", {
+          description: data.error ?? "No se pudo completar el registro",
+        });
+        return;
+      }
+
+      toast.success("Registro exitoso", {
+        description: "Tu cuenta ha sido creada correctamente. Ahora puedes iniciar sesión.",
+      });
+
+      // Limpiar formulario
+      setRegisterNombre1("");
+      setRegisterNombre2("");
+      setRegisterApellido1("");
+      setRegisterApellido2("");
+      setRegisterCI("");
+      setRegisterEmail("");
+      setRegisterPassword("");
+      setRegisterConfirmPassword("");
+      setRegisterPhone("");
+      setRegisterDireccion("");
+      setRegisterEstadoCivil("");
+      setRegisterBirthdate("");
+
+      // Cambiar a tab de login
+      setTimeout(() => {
+        const loginTab = document.querySelector('[value="login"]') as HTMLElement;
+        if (loginTab) loginTab.click();
+      }, 2000);
+    } catch (err: any) {
+      console.error("Error en registro:", err);
+      toast.error("Error en el registro", {
+        description: err?.message ?? "Ocurrió un error inesperado",
+      });
+    } finally {
+      setRegisterLoading(false);
+    }
   };
 
   const handleSocialLogin = (provider: string) => {
@@ -285,79 +475,255 @@ export function LoginRegisterForm() {
           {/* Register Tab */}
           <TabsContent value="register" className="space-y-4">
             <form onSubmit={handleRegister} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="register-name">Nombre completo</Label>
-                <Input
-                  id="register-name"
-                  type="text"
-                  placeholder="Juan Pérez"
-                  value={registerName}
-                  onChange={(e) => setRegisterName(e.target.value)}
-                  required
-                  className="h-11"
-                />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="register-nombre1">
+                    Primer nombre <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="register-nombre1"
+                    type="text"
+                    placeholder="Juan"
+                    value={registerNombre1}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "");
+                      setRegisterNombre1(value);
+                    }}
+                    required
+                    minLength={2}
+                    maxLength={50}
+                    className="h-11"
+                  />
+                  {registerNombre1 && registerNombre1.length < 2 && (
+                    <p className="text-xs text-red-600">
+                      El nombre debe tener al menos 2 caracteres
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="register-nombre2">Segundo nombre (opcional)</Label>
+                  <Input
+                    id="register-nombre2"
+                    type="text"
+                    placeholder="Carlos"
+                    value={registerNombre2}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "");
+                      setRegisterNombre2(value);
+                    }}
+                    maxLength={50}
+                    className="h-11"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="register-apellido1">
+                    Primer apellido <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="register-apellido1"
+                    type="text"
+                    placeholder="Pérez"
+                    value={registerApellido1}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "");
+                      setRegisterApellido1(value);
+                    }}
+                    required
+                    minLength={2}
+                    maxLength={50}
+                    className="h-11"
+                  />
+                  {registerApellido1 && registerApellido1.length < 2 && (
+                    <p className="text-xs text-red-600">
+                      El apellido debe tener al menos 2 caracteres
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="register-apellido2">Segundo apellido (opcional)</Label>
+                  <Input
+                    id="register-apellido2"
+                    type="text"
+                    placeholder="González"
+                    value={registerApellido2}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, "");
+                      setRegisterApellido2(value);
+                    }}
+                    maxLength={50}
+                    className="h-11"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="register-ci">
+                    Cédula de identidad <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="register-ci"
+                    type="text"
+                    placeholder="12345678"
+                    value={registerCI}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, "");
+                      if (value.length <= 10) {
+                        setRegisterCI(value);
+                      }
+                    }}
+                    required
+                    className="h-11"
+                    minLength={6}
+                    maxLength={10}
+                  />
+                  {registerCI && (registerCI.length < 6 || registerCI.length > 10) && (
+                    <p className="text-xs text-red-600">
+                      La cédula debe tener entre 6 y 10 dígitos
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="register-phone">
+                    Teléfono <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="register-phone"
+                    type="text"
+                    placeholder="04121234567"
+                    value={registerPhone}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, "");
+                      if (value.length <= 15) {
+                        setRegisterPhone(value);
+                      }
+                    }}
+                    required
+                    className="h-11"
+                    minLength={10}
+                    maxLength={15}
+                  />
+                  {registerPhone && registerPhone.length < 10 && (
+                    <p className="text-xs text-red-600">
+                      El teléfono debe tener al menos 10 dígitos
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="register-email">Correo electrónico</Label>
+                <Label htmlFor="register-email">
+                  Correo electrónico <span className="text-red-500">*</span>
+                </Label>
                 <Input
                   id="register-email"
                   type="email"
                   placeholder="tu@email.com"
                   value={registerEmail}
-                  onChange={(e) => setRegisterEmail(e.target.value)}
+                  onChange={(e) => setRegisterEmail(e.target.value.toLowerCase().trim())}
                   required
                   className="h-11"
+                  maxLength={100}
                 />
+                {registerEmail && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}$/i.test(registerEmail) && (
+                  <p className="text-xs text-red-600">
+                    Ingresa un correo electrónico válido
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="register-phone">Teléfono</Label>
-                <Input
-                  id="register-phone"
-                  type="tel"
-                  placeholder="+58 412 1234567"
-                  value={registerPhone}
-                  onChange={(e) => setRegisterPhone(e.target.value)}
-                  required
-                  className="h-11"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="register-birthdate">Fecha de nacimiento</Label>
-                <Input
-                  id="register-birthdate"
-                  type="date"
-                  value={registerBirthdate}
-                  onChange={(e) => setRegisterBirthdate(e.target.value)}
-                  required
-                  className="h-11"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="register-country">
-                  Nacionalidad / País de residencia
+                <Label htmlFor="register-direccion">
+                  Dirección <span className="text-red-500">*</span>
                 </Label>
-                <Select
-                  value={registerCountry}
-                  onValueChange={setRegisterCountry}
+                <Input
+                  id="register-direccion"
+                  type="text"
+                  placeholder="Calle, número, ciudad"
+                  value={registerDireccion}
+                  onChange={(e) => setRegisterDireccion(e.target.value)}
                   required
-                >
-                  <SelectTrigger className="h-11">
-                    <SelectValue placeholder="Selecciona tu país" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ve">Venezuela</SelectItem>
-                    <SelectItem value="co">Colombia</SelectItem>
-                    <SelectItem value="mx">México</SelectItem>
-                    <SelectItem value="ar">Argentina</SelectItem>
-                    <SelectItem value="es">España</SelectItem>
-                    <SelectItem value="us">Estados Unidos</SelectItem>
-                    <SelectItem value="other">Otro</SelectItem>
-                  </SelectContent>
-                </Select>
+                  className="h-11"
+                  minLength={10}
+                  maxLength={200}
+                />
+                {registerDireccion && registerDireccion.length < 10 && (
+                  <p className="text-xs text-red-600">
+                    La dirección debe tener al menos 10 caracteres
+                  </p>
+                )}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="register-estado-civil">
+                    Estado civil <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={registerEstadoCivil}
+                    onValueChange={setRegisterEstadoCivil}
+                    required
+                  >
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Selecciona tu estado civil" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="soltero">Soltero/a</SelectItem>
+                      <SelectItem value="casado">Casado/a</SelectItem>
+                      <SelectItem value="divorciado">Divorciado/a</SelectItem>
+                      <SelectItem value="viudo">Viudo/a</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="register-birthdate">
+                    Fecha de nacimiento <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="register-birthdate"
+                    type="date"
+                    value={registerBirthdate}
+                    onChange={(e) => setRegisterBirthdate(e.target.value)}
+                    required
+                    className="h-11"
+                    max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split("T")[0]}
+                    min={new Date(new Date().setFullYear(new Date().getFullYear() - 120)).toISOString().split("T")[0]}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Debes ser mayor de 18 años
+                  </p>
+                  {registerBirthdate && (() => {
+                    const fechaNac = new Date(registerBirthdate);
+                    const hoy = new Date();
+                    let edad = hoy.getFullYear() - fechaNac.getFullYear();
+                    const mes = hoy.getMonth() - fechaNac.getMonth();
+                    if (mes < 0 || (mes === 0 && hoy.getDate() < fechaNac.getDate())) {
+                      edad--;
+                    }
+                    if (edad < 18) {
+                      return (
+                        <p className="text-xs text-red-600">
+                          Debes ser mayor de 18 años para registrarte
+                        </p>
+                      );
+                    }
+                    if (fechaNac > hoy) {
+                      return (
+                        <p className="text-xs text-red-600">
+                          La fecha de nacimiento no puede ser futura
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -469,8 +835,16 @@ export function LoginRegisterForm() {
               <Button
                 type="submit"
                 className="w-full h-11 bg-orange-600 hover:bg-orange-700 text-white font-semibold"
+                disabled={registerLoading}
               >
-                Crear cuenta
+                {registerLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creando cuenta...
+                  </>
+                ) : (
+                  "Crear cuenta"
+                )}
               </Button>
             </form>
 
