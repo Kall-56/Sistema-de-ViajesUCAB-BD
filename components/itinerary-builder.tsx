@@ -29,6 +29,8 @@ import {
   Plus,
   Search,
 } from "lucide-react"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
 
 type Servicio = {
   id: number;
@@ -282,6 +284,128 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
     if (tipo.includes("maritimo")) return "Crucero"
     if (tipo.includes("terrestre")) return "Terrestre"
     return tipoServicio
+  }
+
+  async function descargarPDF() {
+    if (!venta || items.length === 0) {
+      toast.error("No hay datos para generar el PDF")
+      return
+    }
+
+    try {
+      // Obtener información del cliente
+      const userRes = await fetch("/api/auth/user-info", { cache: "no-store" })
+      const userData = await userRes.json()
+      const nombreCliente = userData?.user?.nombre || "Cliente"
+
+      // Crear PDF
+      const doc = new jsPDF()
+      
+      // Título
+      doc.setFontSize(20)
+      doc.setTextColor(233, 30, 99)
+      doc.text("Itinerario de Viaje", 14, 20)
+      
+      // Información del cliente y venta
+      doc.setFontSize(10)
+      doc.setTextColor(0, 0, 0)
+      doc.text(`Cliente: ${nombreCliente}`, 14, 30)
+      doc.text(`Número de Itinerario: #${venta.id_venta}`, 14, 36)
+      doc.text(`Fecha de Generación: ${new Date().toLocaleDateString("es-ES", {
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+      })}`, 14, 42)
+
+      // Ordenar items por fecha
+      const itemsOrdenados = [...items].sort((a, b) => {
+        const dateA = new Date(a.fecha_inicio).getTime()
+        const dateB = new Date(b.fecha_inicio).getTime()
+        return dateA - dateB
+      })
+
+      // Preparar datos de la tabla
+      const headers = [["#", "Tipo", "Servicio", "Fecha Inicio", "Fecha Fin", "Costo (USD)"]]
+      const rows = itemsOrdenados.map((item, index) => [
+        String(index + 1),
+        getTypeLabel(item.tipo_servicio),
+        item.nombre_servicio || "Sin nombre",
+        item.fecha_inicio 
+          ? new Date(item.fecha_inicio).toLocaleDateString("es-ES", {
+              day: "numeric",
+              month: "short",
+              year: "numeric"
+            })
+          : "N/A",
+        item.fecha_fin
+          ? new Date(item.fecha_fin).toLocaleDateString("es-ES", {
+              day: "numeric",
+              month: "short",
+              year: "numeric"
+            })
+          : "N/A",
+        (item.costo_unitario_usd || 0).toLocaleString("es-VE", {
+          style: "currency",
+          currency: "USD"
+        })
+      ])
+
+      // Agregar tabla
+      autoTable(doc, {
+        head: headers,
+        body: rows,
+        startY: 50,
+        styles: {
+          fontSize: 8,
+          cellPadding: 3,
+        },
+        headStyles: {
+          fillColor: [233, 30, 99],
+          textColor: 255,
+          fontStyle: "bold",
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+        margin: { top: 10, left: 14, right: 14 },
+      })
+
+      // Agregar total
+      const finalY = (doc as any).lastAutoTable.finalY || 50
+      doc.setFontSize(12)
+      doc.setFont(undefined, "bold")
+      doc.text("Total del Itinerario:", 14, finalY + 15)
+      doc.setFontSize(14)
+      doc.setTextColor(233, 30, 99)
+      doc.text(
+        totalPrice.toLocaleString("es-VE", {
+          style: "currency",
+          currency: "USD"
+        }),
+        14,
+        finalY + 22
+      )
+
+      // Pie de página
+      const pageCount = doc.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFontSize(8)
+        doc.setTextColor(150, 150, 150)
+        doc.text(
+          `Página ${i} de ${pageCount} - ViajesUCAB`,
+          doc.internal.pageSize.getWidth() / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: "center" }
+        )
+      }
+
+      // Guardar PDF
+      doc.save(`itinerario-${venta.id_venta}-${new Date().toISOString().split("T")[0]}.pdf`)
+      toast.success("Itinerario descargado en formato PDF")
+    } catch (error: any) {
+      toast.error(error.message || "Error al generar el PDF")
+    }
   }
 
   if (loading) {
@@ -571,11 +695,7 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
                     variant="outline"
                     className="w-full bg-transparent"
                     disabled={items.length === 0}
-                    onClick={() => {
-                      toast.info("Próximamente", {
-                        description: "La descarga de PDF estará disponible pronto",
-                      })
-                    }}
+                    onClick={descargarPDF}
                   >
                     <Download className="h-4 w-4 mr-2" />
                     Descargar PDF

@@ -1,25 +1,15 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
-import { cookies } from "next/headers";
+import { requireCliente } from "@/lib/require-admin";
 
 // GET: Obtener conteo de items en el carrito
 export async function GET() {
-  const c = cookies().get("viajesucab_session");
-  if (!c?.value) {
+  const auth = requireCliente();
+  if (!auth.ok) {
     return NextResponse.json({ count: 0 });
   }
 
-  let session: any;
-  try {
-    session = JSON.parse(c.value);
-  } catch {
-    return NextResponse.json({ count: 0 });
-  }
-
-  const clienteId = Number(session?.clienteId);
-  if (!Number.isInteger(clienteId) || clienteId <= 0) {
-    return NextResponse.json({ count: 0 });
-  }
+  const clienteId = auth.session.clienteId!;
 
   try {
     // Contar ventas pendientes con items (estas son las que están en el carrito)

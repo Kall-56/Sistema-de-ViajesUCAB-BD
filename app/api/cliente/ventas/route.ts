@@ -1,25 +1,15 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
-import { cookies } from "next/headers";
+import { requireCliente } from "@/lib/require-admin";
 
 // GET: Obtener ventas activas del cliente (itinerarios en construcción)
 export async function GET() {
-  const c = cookies().get("viajesucab_session");
-  if (!c?.value) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  const auth = requireCliente();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  let session: any;
-  try {
-    session = JSON.parse(c.value);
-  } catch {
-    return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
-  }
-
-  const clienteId = Number(session?.clienteId);
-  if (!Number.isInteger(clienteId) || clienteId <= 0) {
-    return NextResponse.json({ error: "Cliente no identificado" }, { status: 403 });
-  }
+  const clienteId = auth.session.clienteId!;
 
   try {
     // Obtener ventas pendientes del cliente con sus itinerarios
@@ -71,22 +61,12 @@ export async function GET() {
 
 // POST: Iniciar una nueva venta (itinerario)
 export async function POST() {
-  const c = cookies().get("viajesucab_session");
-  if (!c?.value) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  const auth = requireCliente();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  let session: any;
-  try {
-    session = JSON.parse(c.value);
-  } catch {
-    return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
-  }
-
-  const clienteId = Number(session?.clienteId);
-  if (!Number.isInteger(clienteId) || clienteId <= 0) {
-    return NextResponse.json({ error: "Cliente no identificado" }, { status: 403 });
-  }
+  const clienteId = auth.session.clienteId!;
 
   try {
     // Usar función almacenada iniciar_venta

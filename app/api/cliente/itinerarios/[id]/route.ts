@@ -1,30 +1,19 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
-import { cookies } from "next/headers";
+import { requireCliente } from "@/lib/require-admin";
 
 // DELETE: Eliminar un item del itinerario
 export async function DELETE(
   _req: Request,
   { params }: { params: { id: string } }
 ) {
-  const c = cookies().get("viajesucab_session");
-  if (!c?.value) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  const auth = requireCliente();
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  let session: any;
-  try {
-    session = JSON.parse(c.value);
-  } catch {
-    return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
-  }
-
-  const clienteId = Number(session?.clienteId);
+  const clienteId = auth.session.clienteId!;
   const idItinerario = Number(params.id);
-
-  if (!Number.isInteger(clienteId) || clienteId <= 0) {
-    return NextResponse.json({ error: "Cliente no identificado" }, { status: 403 });
-  }
 
   if (!Number.isInteger(idItinerario) || idItinerario <= 0) {
     return NextResponse.json({ error: "ID de itinerario inválido" }, { status: 400 });
