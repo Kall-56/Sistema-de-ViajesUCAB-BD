@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   FileBarChart,
   Download,
@@ -30,86 +31,269 @@ import {
   Search,
 } from "lucide-react"
 import { useState } from "react"
+import { toast } from "sonner"
+import { Loader2 } from "lucide-react"
+import jsPDF from "jspdf"
+import autoTable from "jspdf-autotable"
+
+// Definición de los 5 reportes basados en stored procedures
+interface ReporteDef {
+  id: number;
+  name: string;
+  category: string;
+  description: string;
+  spName: string; // Nombre del stored procedure
+  icon: any;
+  parametros?: {
+    fechaInicio?: boolean;
+    fechaFin?: boolean;
+    limit?: boolean;
+  };
+}
 
 export function ReportsAnalytics() {
   const [activeTab, setActiveTab] = useState("catalog")
   const [showBuilder, setShowBuilder] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const [generandoReporte, setGenerandoReporte] = useState<number | null>(null)
+  const [reporteData, setReporteData] = useState<any>(null)
+  const [reporteActivo, setReporteActivo] = useState<string | null>(null)
 
-  const reportCatalog = [
+  // Los 5 reportes principales basados en stored procedures de la BD
+  const reportCatalog: ReporteDef[] = [
     {
       id: 1,
-      name: "Reporte de Ventas Diarias",
-      category: "Ventas",
-      description: "Resumen de reservas y ventas por día",
-      frequency: "Diario",
-      lastRun: "2025-02-10 08:00",
-      icon: DollarSign,
+      name: "Top Destinos Vendidos",
+      category: "Destinos",
+      description: "Top 10 destinos más vendidos con ingresos en bolívares",
+      spName: "rep_top_destinos_vendidos",
+      icon: MapPin,
+      parametros: {}, // Sin parámetros
     },
     {
       id: 2,
-      name: "Análisis de Destinos Populares",
-      category: "Destinos",
-      description: "Top destinos por reservas e ingresos",
-      frequency: "Semanal",
-      lastRun: "2025-02-08 09:00",
-      icon: MapPin,
+      name: "Reporte de Ventas por Período",
+      category: "Ventas",
+      description: "Análisis completo de ventas en un período determinado",
+      spName: "rep_ventas_periodo",
+      icon: DollarSign,
+      parametros: {
+        fechaInicio: true,
+        fechaFin: true,
+      },
     },
     {
       id: 3,
-      name: "Rendimiento de Promociones",
-      category: "Marketing",
-      description: "Efectividad de promociones activas",
-      frequency: "Semanal",
-      lastRun: "2025-02-08 10:00",
-      icon: Tag,
+      name: "Clientes Más Activos",
+      category: "Clientes",
+      description: "Ranking de clientes con mayor número de reservas y gastos",
+      spName: "rep_clientes_activos",
+      icon: Users,
+      parametros: {
+        fechaInicio: true,
+        fechaFin: true,
+        limit: true,
+      },
     },
     {
       id: 4,
-      name: "Comportamiento de Clientes",
-      category: "Clientes",
-      description: "Patrones de compra y preferencias",
-      frequency: "Mensual",
-      lastRun: "2025-02-01 08:00",
-      icon: Users,
+      name: "Servicios Más Populares",
+      category: "Operaciones",
+      description: "Servicios más vendidos con estadísticas de demanda",
+      spName: "rep_servicios_populares",
+      icon: Plane,
+      parametros: {
+        fechaInicio: true,
+        fechaFin: true,
+        limit: true,
+      },
     },
     {
       id: 5,
-      name: "Ocupación de Servicios",
-      category: "Operaciones",
-      description: "Tasas de ocupación de vuelos, hoteles y tours",
-      frequency: "Diario",
-      lastRun: "2025-02-10 07:00",
-      icon: Plane,
-    },
-    {
-      id: 6,
-      name: "Análisis de Cancelaciones",
-      category: "Operaciones",
-      description: "Motivos y patrones de cancelaciones",
-      frequency: "Semanal",
-      lastRun: "2025-02-08 11:00",
-      icon: TrendingUp,
-    },
-    {
-      id: 7,
       name: "Ingresos por Método de Pago",
       category: "Finanzas",
-      description: "Distribución de pagos y comisiones",
-      frequency: "Mensual",
-      lastRun: "2025-02-01 09:00",
+      description: "Distribución de ingresos según método de pago utilizado",
+      spName: "rep_ingresos_metodos_pago",
       icon: DollarSign,
-    },
-    {
-      id: 8,
-      name: "Tiempo de Respuesta Postventa",
-      category: "Servicio",
-      description: "Métricas de atención al cliente",
-      frequency: "Semanal",
-      lastRun: "2025-02-08 12:00",
-      icon: Clock,
+      parametros: {
+        fechaInicio: true,
+        fechaFin: true,
+      },
     },
   ]
+
+  // Estado para el modal de parámetros
+  const [showParametrosDialog, setShowParametrosDialog] = useState(false)
+  const [reporteSeleccionado, setReporteSeleccionado] = useState<ReporteDef | null>(null)
+  const [parametrosForm, setParametrosForm] = useState({
+    fechaInicio: "",
+    fechaFin: "",
+    limit: "",
+  })
+
+  const generarReporte = async (reporte: ReporteDef, fechaInicio?: string, fechaFin?: string, limit?: number) => {
+    setGenerandoReporte(reporte.id)
+    setReporteActivo(reporte.spName)
+    
+    try {
+      // Construir URL con parámetros
+      const params = new URLSearchParams()
+      if (fechaInicio) params.append("fechaInicio", fechaInicio)
+      if (fechaFin) params.append("fechaFin", fechaFin)
+      if (limit) params.append("limit", limit.toString())
+
+      const url = `/api/reportes/${reporte.spName}?${params.toString()}`
+      
+      const response = await fetch(url, {
+        cache: "no-store",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Error al generar el reporte")
+      }
+
+      const data = await response.json()
+      setReporteData(data)
+      toast.success(`Reporte "${reporte.name}" generado exitosamente`)
+    } catch (error: any) {
+      console.error("Error generando reporte:", error)
+      toast.error(error.message || "Error al generar el reporte")
+      setReporteData(null)
+    } finally {
+      setGenerandoReporte(null)
+    }
+  }
+
+  const descargarReporte = async (formato: "json" | "csv" | "pdf" = "json") => {
+    if (!reporteData) {
+      toast.error("No hay datos para descargar. Genere el reporte primero.")
+      return
+    }
+
+    try {
+      if (formato === "json") {
+        const blob = new Blob([JSON.stringify(reporteData, null, 2)], { type: "application/json" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `reporte-${reporteActivo}-${new Date().toISOString().split("T")[0]}.json`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        toast.success("Reporte descargado en formato JSON")
+      } else if (formato === "csv") {
+        // Convertir a CSV
+        if (!reporteData.datos || reporteData.datos.length === 0) {
+          toast.error("No hay datos para convertir a CSV")
+          return
+        }
+
+        const headers = Object.keys(reporteData.datos[0])
+        const csvRows = [
+          headers.join(","),
+          ...reporteData.datos.map((row: any) =>
+            headers.map(header => {
+              const value = row[header]
+              return typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value
+            }).join(",")
+          ),
+        ]
+
+        const csv = csvRows.join("\n")
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `reporte-${reporteActivo}-${new Date().toISOString().split("T")[0]}.csv`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        toast.success("Reporte descargado en formato CSV")
+      } else if (formato === "pdf") {
+        // Convertir a PDF
+        if (!reporteData.datos || reporteData.datos.length === 0) {
+          toast.error("No hay datos para convertir a PDF")
+          return
+        }
+
+        const doc = new jsPDF()
+        const reporteNombre = reportCatalog.find(r => r.spName === reporteActivo)?.name || "Reporte"
+        
+        // Encabezado
+        doc.setFontSize(18)
+        doc.setTextColor(233, 30, 99) // Color #E91E63
+        doc.text(reporteNombre, 14, 20)
+        
+        doc.setFontSize(10)
+        doc.setTextColor(100, 100, 100)
+        doc.text(`Generado el: ${new Date().toLocaleString("es-VE")}`, 14, 28)
+        doc.text(`Total de registros: ${reporteData.totalRegistros}`, 14, 34)
+        
+        // Parámetros si existen
+        if (reporteData.parametros && (reporteData.parametros.fechaInicio || reporteData.parametros.fechaFin)) {
+          let paramsText = "Parámetros: "
+          if (reporteData.parametros.fechaInicio) paramsText += `Desde ${reporteData.parametros.fechaInicio} `
+          if (reporteData.parametros.fechaFin) paramsText += `Hasta ${reporteData.parametros.fechaFin}`
+          doc.text(paramsText, 14, 40)
+        }
+
+        // Preparar datos para la tabla
+        const headers = Object.keys(reporteData.datos[0]).map(h => 
+          h.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+        )
+        const rows = reporteData.datos.map((row: any) => 
+          Object.values(row).map(val => {
+            if (val === null || val === undefined) return ""
+            if (typeof val === "object") return JSON.stringify(val)
+            return String(val)
+          })
+        )
+
+        // Agregar tabla
+        autoTable(doc, {
+          head: [headers],
+          body: rows,
+          startY: reporteData.parametros && (reporteData.parametros.fechaInicio || reporteData.parametros.fechaFin) ? 46 : 40,
+          styles: { 
+            fontSize: 8,
+            cellPadding: 3,
+          },
+          headStyles: {
+            fillColor: [233, 30, 99],
+            textColor: 255,
+            fontStyle: "bold",
+          },
+          alternateRowStyles: {
+            fillColor: [245, 245, 245],
+          },
+          margin: { top: 10, left: 14, right: 14 },
+        })
+
+        // Pie de página
+        const pageCount = doc.getNumberOfPages()
+        for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i)
+          doc.setFontSize(8)
+          doc.setTextColor(150, 150, 150)
+          doc.text(
+            `Página ${i} de ${pageCount} - ViajesUCAB`,
+            doc.internal.pageSize.getWidth() / 2,
+            doc.internal.pageSize.getHeight() - 10,
+            { align: "center" }
+          )
+        }
+
+        // Guardar PDF
+        doc.save(`reporte-${reporteActivo}-${new Date().toISOString().split("T")[0]}.pdf`)
+        toast.success("Reporte descargado en formato PDF")
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Error al descargar el reporte")
+    }
+  }
 
   const scheduledReports = [
     {
@@ -229,18 +413,50 @@ export function ReportsAnalytics() {
                       <CardContent className="space-y-3">
                         <div className="text-xs text-muted-foreground space-y-1">
                           <p>
-                            <span className="font-medium">Frecuencia:</span> {report.frequency}
+                            <span className="font-medium">SP:</span> {report.spName}
                           </p>
-                          <p>
-                            <span className="font-medium">Última ejecución:</span> {report.lastRun}
-                          </p>
+                          {reporteData && reporteActivo === report.spName && (
+                            <p className="text-green-600 font-medium">
+                              {reporteData.totalRegistros} registros generados
+                            </p>
+                          )}
                         </div>
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" className="flex-1 gap-2 bg-transparent">
-                            <Play className="h-3 w-3" />
-                            Ejecutar
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="flex-1 gap-2 bg-transparent"
+                            onClick={() => {
+                              // Si el reporte no tiene parámetros, ejecutar directamente
+                              if (!report.parametros || Object.keys(report.parametros).length === 0) {
+                                generarReporte(report)
+                              } else {
+                                setReporteSeleccionado(report)
+                                setParametrosForm({
+                                  fechaInicio: "",
+                                  fechaFin: "",
+                                  limit: "",
+                                })
+                                setShowParametrosDialog(true)
+                              }
+                            }}
+                            disabled={generandoReporte === report.id}
+                          >
+                            {generandoReporte === report.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Play className="h-3 w-3" />
+                            )}
+                            {generandoReporte === report.id ? "Generando..." : "Ejecutar"}
                           </Button>
-                          <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="gap-2 bg-transparent"
+                            onClick={() => descargarReporte("pdf")}
+                            disabled={!reporteData || reporteActivo !== report.spName}
+                            title="Descargar PDF"
+                          >
                             <Download className="h-3 w-3" />
                           </Button>
                         </div>
@@ -488,19 +704,110 @@ export function ReportsAnalytics() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-[#E91E63]" />
-                Vista Previa del Reporte
-              </CardTitle>
-              <CardDescription>Los datos se actualizarán al generar el reporte</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-[#E91E63]" />
+                    Vista Previa del Reporte
+                  </CardTitle>
+                  <CardDescription>
+                    {reporteData 
+                      ? `Reporte: ${reporteData.reporte} - ${reporteData.totalRegistros} registros`
+                      : "Los datos se actualizarán al generar el reporte"}
+                  </CardDescription>
+                </div>
+                {reporteData && (
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => descargarReporte("pdf")}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      PDF
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => descargarReporte("csv")}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      CSV
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => descargarReporte("json")}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      JSON
+                    </Button>
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="h-[400px] flex items-center justify-center border-2 border-dashed rounded-lg">
-                <div className="text-center space-y-2">
-                  <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto" />
-                  <p className="text-muted-foreground">Configura los parámetros y genera el reporte</p>
+              {reporteData && reporteData.datos && reporteData.datos.length > 0 ? (
+                <div className="space-y-4">
+                  {/* Resumen */}
+                  <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Registros</p>
+                      <p className="text-2xl font-bold">{reporteData.totalRegistros}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Fecha Generación</p>
+                      <p className="text-sm font-medium">
+                        {new Date(reporteData.fechaGeneracion).toLocaleString("es-VE")}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Parámetros</p>
+                      <p className="text-xs">
+                        {reporteData.parametros.fechaInicio && `Desde: ${reporteData.parametros.fechaInicio}`}
+                        {reporteData.parametros.fechaFin && ` Hasta: ${reporteData.parametros.fechaFin}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Tabla de datos */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0">
+                          <tr>
+                            {Object.keys(reporteData.datos[0]).map((key) => (
+                              <th key={key} className="px-4 py-2 text-left font-semibold text-xs uppercase">
+                                {key.replace(/_/g, " ")}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reporteData.datos.map((row: any, idx: number) => (
+                            <tr key={idx} className="border-t hover:bg-slate-50 dark:hover:bg-slate-900">
+                              {Object.values(row).map((value: any, colIdx: number) => (
+                                <td key={colIdx} className="px-4 py-2 text-xs">
+                                  {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="h-[400px] flex items-center justify-center border-2 border-dashed rounded-lg">
+                  <div className="text-center space-y-2">
+                    <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto" />
+                    <p className="text-muted-foreground">
+                      {generandoReporte ? "Generando reporte..." : "Ejecute un reporte para ver los resultados"}
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -609,6 +916,120 @@ export function ReportsAnalytics() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Dialog para parámetros del reporte */}
+      <Dialog open={showParametrosDialog} onOpenChange={setShowParametrosDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {reporteSeleccionado && (
+                <>
+                  <reporteSeleccionado.icon className="h-5 w-5 text-[#E91E63]" />
+                  Configurar {reporteSeleccionado.name}
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {reporteSeleccionado?.description}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {reporteSeleccionado?.parametros?.fechaInicio && (
+              <div className="space-y-2">
+                <Label htmlFor="fecha-inicio">
+                  Fecha Inicio <span className="text-muted-foreground text-xs">(opcional)</span>
+                </Label>
+                <Input
+                  id="fecha-inicio"
+                  type="date"
+                  value={parametrosForm.fechaInicio}
+                  onChange={(e) => setParametrosForm({ ...parametrosForm, fechaInicio: e.target.value })}
+                  placeholder="YYYY-MM-DD"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Dejar vacío para incluir todos los registros desde el inicio
+                </p>
+              </div>
+            )}
+
+            {reporteSeleccionado?.parametros?.fechaFin && (
+              <div className="space-y-2">
+                <Label htmlFor="fecha-fin">
+                  Fecha Fin <span className="text-muted-foreground text-xs">(opcional)</span>
+                </Label>
+                <Input
+                  id="fecha-fin"
+                  type="date"
+                  value={parametrosForm.fechaFin}
+                  onChange={(e) => setParametrosForm({ ...parametrosForm, fechaFin: e.target.value })}
+                  placeholder="YYYY-MM-DD"
+                  min={parametrosForm.fechaInicio || undefined}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Dejar vacío para incluir todos los registros hasta el final
+                </p>
+              </div>
+            )}
+
+            {reporteSeleccionado?.parametros?.limit && (
+              <div className="space-y-2">
+                <Label htmlFor="limit">
+                  Límite de Resultados <span className="text-muted-foreground text-xs">(opcional)</span>
+                </Label>
+                <Input
+                  id="limit"
+                  type="number"
+                  min="1"
+                  value={parametrosForm.limit}
+                  onChange={(e) => setParametrosForm({ ...parametrosForm, limit: e.target.value })}
+                  placeholder="Ej: 10, 20, 50..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Número máximo de registros a mostrar. Dejar vacío para mostrar todos.
+                </p>
+              </div>
+            )}
+
+            {(!reporteSeleccionado?.parametros?.fechaInicio && 
+              !reporteSeleccionado?.parametros?.fechaFin && 
+              !reporteSeleccionado?.parametros?.limit) && (
+              <div className="text-sm text-muted-foreground text-center py-4">
+                Este reporte no requiere parámetros adicionales.
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowParametrosDialog(false)
+                setParametrosForm({ fechaInicio: "", fechaFin: "", limit: "" })
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (!reporteSeleccionado) return
+                
+                const fechaInicio = parametrosForm.fechaInicio || undefined
+                const fechaFin = parametrosForm.fechaFin || undefined
+                const limit = parametrosForm.limit ? parseInt(parametrosForm.limit, 10) : undefined
+                
+                setShowParametrosDialog(false)
+                generarReporte(reporteSeleccionado, fechaInicio, fechaFin, limit)
+                setParametrosForm({ fechaInicio: "", fechaFin: "", limit: "" })
+              }}
+              className="bg-[#E91E63] hover:bg-[#E91E63]/90"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Generar Reporte
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
