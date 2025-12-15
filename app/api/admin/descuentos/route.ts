@@ -68,13 +68,73 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { rows } = await pool.query(
-      `SELECT insertar_descuento($1, $2, $3) AS id`,
-      [fkServicioN, porcentajeN, fechaVenc]
+    // Verificar si ya existe un descuento activo para este servicio
+    const { rows: existingRows } = await pool.query(
+      `SELECT id, porcentaje_descuento, fecha_vencimiento
+       FROM descuento 
+       WHERE fk_servicio = $1 
+         AND (fecha_vencimiento IS NULL OR fecha_vencimiento >= CURRENT_DATE)
+       ORDER BY id DESC`,
+      [fkServicioN]
     );
 
-    return NextResponse.json({ ok: true, id: rows[0]?.id }, { status: 201 });
+    // Intentar crear el descuento usando la función almacenada
+    let rows;
+    try {
+      const result = await pool.query(
+        `SELECT insertar_descuento($1, $2, $3) AS id`,
+        [fkServicioN, porcentajeN, fechaVenc]
+      );
+      rows = result.rows;
+    } catch (insertError: any) {
+      // Si falla con error de clave duplicada o constraint único, intentar insertar directamente
+      if (
+        insertError?.message?.includes("duplicate key") || 
+        insertError?.message?.includes("descuento_pk") ||
+        insertError?.message?.includes("unique constraint")
+      ) {
+        // Intentar insertar directamente en la tabla (la PK serial se generará automáticamente)
+        const directInsert = await pool.query(
+          `INSERT INTO descuento (fk_servicio, porcentaje_descuento, fecha_vencimiento)
+           VALUES ($1, $2, $3)
+           RETURNING id`,
+          [fkServicioN, porcentajeN, fechaVenc]
+        );
+        rows = directInsert.rows;
+      } else {
+        // Si es otro tipo de error, relanzarlo
+        throw insertError;
+      }
+    }
+
+    return NextResponse.json({ 
+      ok: true, 
+      id: rows[0]?.id,
+      warning: existingRows?.length > 0 
+        ? `Este servicio ya tiene ${existingRows.length} descuento(s) activo(s). Se ha creado un nuevo descuento. El sistema aplicará el descuento con mayor porcentaje.` 
+        : undefined
+    }, { status: 201 });
   } catch (e: any) {
+    // Si el error es de clave duplicada o constraint único, dar un mensaje más claro
+    if (e?.message?.includes("duplicate key") || e?.message?.includes("descuento_pk")) {
+      return NextResponse.json(
+        { 
+          error: "Error al crear el descuento. Ya existe un descuento con estas características. Intenta editar el descuento existente o contacta con el administrador." 
+        },
+        { status: 400 }
+      );
+    }
+    
+    // Si el error es de constraint único en fk_servicio (si existe)
+    if (e?.message?.includes("unique constraint") && e?.message?.includes("fk_servicio")) {
+      return NextResponse.json(
+        { 
+          error: "Este servicio ya tiene un descuento activo. Puedes editar el descuento existente desde la lista de promociones, o esperar a que expire. Si necesitas múltiples descuentos simultáneos, contacta con el administrador de la base de datos." 
+        },
+        { status: 400 }
+      );
+    }
+    
     return NextResponse.json(
       { error: e?.message ?? "Error creando descuento" },
       { status: 500 }

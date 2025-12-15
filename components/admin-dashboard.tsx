@@ -42,6 +42,7 @@ import { SustainabilityManagement } from "@/components/sustainability-management
 import { PostsaleManagement } from "@/components/postsale-management"
 import { IntegrationsManagement } from "@/components/integrations-management"
 import { ReportsAnalytics } from "@/components/reports-analytics"
+import { ItinerariesManagement } from "@/components/itineraries-management"
 
 type UserInfo = {
   id: number;
@@ -198,6 +199,15 @@ export function AdminDashboard() {
                   >
                     <Plane className="h-4 w-4" />
                     Servicios
+                  </Button>
+
+                  <Button
+                    variant={activeTab === "itineraries" ? "secondary" : "ghost"}
+                    className="w-full justify-start gap-3"
+                    onClick={() => setActiveTab("itineraries")}
+                  >
+                    <Calendar className="h-4 w-4" />
+                    Itinerarios
                   </Button>
 
                   <Button
@@ -581,6 +591,7 @@ export function AdminDashboard() {
             {/* Packages and Services CRUD modules */}
             {activeTab === "packages" && <PackagesManagement />}
             {activeTab === "services" && <ServicesManagement />}
+            {activeTab === "itineraries" && <ItinerariesManagement />}
 
             {/* Restaurants Management */}
             {activeTab === "restaurants" && <RestaurantsManagement />}

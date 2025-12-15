@@ -34,18 +34,34 @@ export async function GET(
       return NextResponse.json({ error: "No autorizado" }, { status: 403 });
     }
 
-    // Obtener itinerario con todos los campos necesarios
-    // La función obtener_itinerario_venta solo retorna algunos campos,
-    // así que hacemos la consulta directa para obtener todos los necesarios
+    // Obtener itinerario con todos los campos necesarios, incluyendo conversión a Bs
     const { rows } = await pool.query(
       `
       SELECT
         i.id AS id_itinerario,
         i.fk_servicio AS id_servicio,
         s.nombre AS nombre_servicio,
-        COALESCE(i.costo_especial, s.costo_servicio) AS costo_unitario_usd,
+        COALESCE(i.costo_especial, s.costo_servicio) AS costo_unitario_original,
+        -- Convertir a Bs usando tasa de cambio activa
+        CASE 
+          WHEN s.denominacion != 'VEN' THEN
+            COALESCE(i.costo_especial, s.costo_servicio) * 
+            COALESCE(
+              (SELECT cantidad_cambio 
+               FROM cambio_moneda 
+               WHERE denominacion = s.denominacion 
+                 AND fecha_fin IS NULL 
+               ORDER BY fecha_inicio DESC 
+               LIMIT 1), 
+              1
+            )
+          ELSE
+            COALESCE(i.costo_especial, s.costo_servicio)
+        END AS costo_unitario_bs,
         i.fecha_hora_inicio AS fecha_inicio,
-        s.tipo_servicio
+        s.tipo_servicio,
+        s.denominacion AS denominacion_original,
+        'VEN' AS denominacion
       FROM itinerario i
       JOIN servicio s ON s.id = i.fk_servicio
       WHERE i.fk_venta = $1

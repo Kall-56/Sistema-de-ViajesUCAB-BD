@@ -107,12 +107,33 @@ export async function DELETE(
     return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
   try {
+    // Verificar si hay servicios en el paquete que se van a eliminar
+    const { rows: serviciosPaquete } = await pool.query(
+      `SELECT fk_servicio FROM paquete_servicio WHERE fk_paquete = $1`,
+      [id]
+    );
+
+    const idsServicios = serviciosPaquete.map((r: any) => r.fk_servicio);
+
+    // Eliminar el paquete
     const { rows } = await pool.query(
       `SELECT eliminar_paquete($1) AS id`,
       [id]
     );
 
-    return NextResponse.json({ ok: true, id: rows[0]?.id });
+    // Nota: Los itinerarios que fueron creados desde un paquete no tienen
+    // una referencia directa al paquete en la BD. Los servicios individuales
+    // siguen existiendo, así que los itinerarios en carritos no se ven afectados
+    // directamente por la eliminación del paquete.
+    // Sin embargo, si algún servicio del paquete se elimina después, eso sí afectaría
+    // los itinerarios, pero eso se maneja en la eliminación de servicios.
+
+    return NextResponse.json({ 
+      ok: true, 
+      id: rows[0]?.id,
+      servicios_afectados: idsServicios.length,
+      mensaje: "El paquete ha sido eliminado. Los servicios individuales siguen disponibles. Los itinerarios en carritos no se ven afectados."
+    });
   } catch (e: any) {
     return NextResponse.json(
       { error: e?.message ?? "Error eliminando paquete" },

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -234,12 +235,26 @@ export function ServicesManagement() {
     try {
       const r = await fetch(`/api/admin/aerolineas/${selectedServiceId}`, { method: "DELETE" })
       const data = await r.json()
-      if (!r.ok) throw new Error(data?.error ?? "Error eliminando aerolínea")
+      if (!r.ok) {
+        // Si hay información adicional en la respuesta, mostrarla
+        const errorMsg = data?.error ?? "Error eliminando servicio"
+        throw new Error(errorMsg)
+      }
+      
+      toast.success("Servicio eliminado correctamente", {
+        description: "El servicio y sus descuentos asociados han sido eliminados",
+      })
+      
       setDeleteDialogOpen(false)
       setSelectedServiceId(null)
       await fetchAerolineas()
     } catch (err: any) {
-      setError(err?.message ?? "Error")
+      const errorMsg = err?.message ?? "Error eliminando servicio"
+      setError(errorMsg)
+      toast.error("No se pudo eliminar el servicio", {
+        description: errorMsg,
+        duration: 5000,
+      })
     }
   }
 

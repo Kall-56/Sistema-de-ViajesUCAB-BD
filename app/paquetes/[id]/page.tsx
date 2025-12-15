@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Loader2, ArrowLeft, MapPin, Star, CheckCircle2, XCircle, ShoppingCart, Calendar } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -42,7 +45,9 @@ export default function PaqueteDetallePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [paquete, setPaquete] = useState<PaqueteDetalle | null>(null)
-  const [comprando, setComprando] = useState(false)
+  const [agregando, setAgregando] = useState(false)
+  const [showFechasDialog, setShowFechasDialog] = useState(false)
+  const [fechas, setFechas] = useState<{ [key: number]: string }>({})
 
   useEffect(() => {
     async function fetchPaquete() {
@@ -74,29 +79,107 @@ export default function PaqueteDetallePage() {
     fetchPaquete()
   }, [params.id, router])
 
-  const handleComprar = async () => {
+  const handleAgregarAlCarrito = async () => {
     if (!paquete) return
 
     // Verificar que el usuario esté autenticado
     try {
-      const authCheck = await fetch("/api/auth/check", { cache: "no-store" })
+      const authCheck = await fetch("/api/auth/me", { cache: "no-store" })
       if (!authCheck.ok) {
-        toast.error("Debes iniciar sesión para comprar paquetes")
-        router.push(`/login?next=/paquetes/${paquete.id_paquete}/comprar`)
+        toast.error("Debes iniciar sesión para agregar paquetes al carrito")
+        router.push(`/login?next=/paquetes/${paquete.id_paquete}`)
         return
       }
 
       const authData = await authCheck.json()
-      if (authData.rolId !== 1) {
-        toast.error("Solo los clientes pueden comprar paquetes")
+      if (!authData.user || authData.user.rolId !== 1) {
+        toast.error("Solo los clientes pueden agregar paquetes al carrito")
         return
       }
 
-      // Redirigir a la página de compra donde se seleccionan las fechas
-      router.push(`/paquetes/${paquete.id_paquete}/comprar`)
+      // Abrir diálogo para seleccionar fechas
+      setShowFechasDialog(true)
+      // Inicializar fechas vacías
+      const fechasIniciales: { [key: number]: string } = {}
+      paquete.servicios.forEach((s) => {
+        fechasIniciales[s.id] = ""
+      })
+      setFechas(fechasIniciales)
     } catch (error) {
       console.error("Error verificando autenticación:", error)
       toast.error("Error al verificar autenticación")
+    }
+  }
+
+  const handleConfirmarFechas = async () => {
+    if (!paquete) return
+
+    // Validar que todas las fechas estén seleccionadas
+    const todasFechasSeleccionadas = paquete.servicios.every((s) => {
+      const fecha = fechas[s.id]
+      return fecha && fecha.trim() !== ""
+    })
+
+    if (!todasFechasSeleccionadas) {
+      toast.error("Debes seleccionar una fecha para cada servicio")
+      return
+    }
+
+    // Validar que ninguna fecha sea pasada
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    for (const servicio of paquete.servicios) {
+      const fechaStr = fechas[servicio.id]
+      if (fechaStr) {
+        const fecha = new Date(fechaStr)
+        fecha.setHours(0, 0, 0, 0)
+        if (fecha < hoy) {
+          toast.error(`La fecha para "${servicio.nombre}" no puede ser anterior a hoy`)
+          return
+        }
+      }
+    }
+
+    setAgregando(true)
+    try {
+      // Ordenar las fechas según el orden de los servicios en el paquete
+      const fechasOrdenadas = paquete.servicios.map((s) => {
+        const fecha = fechas[s.id]
+        if (!fecha) return null
+        // Convertir a ISO string para enviar a la API
+        return new Date(fecha).toISOString()
+      }).filter((f): f is string => f !== null)
+
+      const response = await fetch("/api/cliente/paquetes/comprar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id_paquete: paquete.id_paquete,
+          fechas_inicio: fechasOrdenadas,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Error agregando paquete al carrito")
+      }
+
+      toast.success("¡Paquete agregado al carrito!", {
+        description: "El paquete ha sido agregado a tu carrito de compras",
+      })
+
+      // Disparar evento para actualizar el contador del carrito
+      window.dispatchEvent(new Event("cart-updated"))
+
+      // Cerrar diálogo
+      setShowFechasDialog(false)
+      setFechas({})
+    } catch (error: any) {
+      console.error("Error agregando paquete al carrito:", error)
+      toast.error(error.message || "Error al agregar el paquete al carrito")
+    } finally {
+      setAgregando(false)
     }
   }
 
@@ -303,18 +386,18 @@ export default function PaqueteDetallePage() {
                 <Button
                   className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90"
                   size="lg"
-                  onClick={handleComprar}
-                  disabled={comprando}
+                  onClick={handleAgregarAlCarrito}
+                  disabled={agregando}
                 >
-                  {comprando ? (
+                  {agregando ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Procesando...
+                      Agregando...
                     </>
                   ) : (
                     <>
                       <ShoppingCart className="mr-2 h-4 w-4" />
-                      Comprar Paquete
+                      Agregar al Carrito
                     </>
                   )}
                 </Button>
@@ -332,6 +415,84 @@ export default function PaqueteDetallePage() {
         </div>
       </main>
       <Footer />
+
+      {/* Dialog para seleccionar fechas */}
+      <Dialog open={showFechasDialog} onOpenChange={setShowFechasDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Seleccionar Fechas para los Servicios</DialogTitle>
+            <DialogDescription>
+              Selecciona la fecha de inicio para cada servicio del paquete. Todas las fechas deben ser futuras.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {paquete?.servicios.map((servicio) => (
+              <div key={servicio.id} className="space-y-2 border rounded-lg p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <Label htmlFor={`fecha-${servicio.id}`} className="font-semibold">
+                      {servicio.nombre}
+                    </Label>
+                    {servicio.lugar_nombre && (
+                      <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                        <MapPin className="h-3 w-3" />
+                        {servicio.lugar_nombre}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">{servicio.descripcion}</p>
+                  </div>
+                  <Badge variant="outline" className="shrink-0">
+                    {servicio.tipo_servicio}
+                  </Badge>
+                </div>
+                <div>
+                  <Label htmlFor={`fecha-${servicio.id}`} className="text-sm">
+                    Fecha de Inicio *
+                  </Label>
+                  <Input
+                    id={`fecha-${servicio.id}`}
+                    type="date"
+                    value={fechas[servicio.id] || ""}
+                    onChange={(e) => setFechas({ ...fechas, [servicio.id]: e.target.value })}
+                    min={new Date().toISOString().split("T")[0]}
+                    className="mt-1"
+                    required
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowFechasDialog(false)
+                setFechas({})
+              }}
+              disabled={agregando}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmarFechas}
+              disabled={agregando}
+              className="bg-[#E91E63] hover:bg-[#C2185B]"
+            >
+              {agregando ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Agregando...
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  Agregar al Carrito
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

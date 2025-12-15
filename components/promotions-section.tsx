@@ -1,16 +1,22 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Percent, ArrowRight, Flame, Loader2 } from "lucide-react"
+import { Percent, ArrowRight, Flame, Loader2, ShoppingCart } from "lucide-react"
 import { WishlistButton } from "@/components/wishlist-button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Link from "next/link"
 
 type PromocionAPI = {
   descuento_id: number;
   porcentaje_descuento: number;
+  servicio_id: number;
   servicio_nombre: string;
   descripcion: string;
   costo_servicio: number;
@@ -29,11 +35,18 @@ type PromocionDisplay = {
   savings: number;
   image: string | null;
   isHotDeal: boolean;
+  servicioId?: number; // ID del servicio para agregar al carrito
+  descuentoId?: number; // ID del descuento
 };
 
 export function PromotionsSection() {
+  const router = useRouter()
   const [promotions, setPromotions] = useState<PromocionDisplay[]>([])
   const [loading, setLoading] = useState(true)
+  const [showDateDialog, setShowDateDialog] = useState(false)
+  const [selectedPromo, setSelectedPromo] = useState<PromocionDisplay | null>(null)
+  const [selectedDate, setSelectedDate] = useState("")
+  const [addingToCart, setAddingToCart] = useState(false)
 
   useEffect(() => {
     async function fetchPromociones() {
@@ -58,7 +71,9 @@ export function PromotionsSection() {
             price: p.precio_con_descuento,
             savings: p.ahorro,
             image: p.imagen_principal,
-            isHotDeal: p.porcentaje_descuento >= 30
+            isHotDeal: p.porcentaje_descuento >= 30,
+            servicioId: p.servicio_id, // Guardar servicio_id directamente
+            descuentoId: p.descuento_id // Guardar descuento_id directamente
           }))
         
         setPromotions(mapped)
@@ -72,6 +87,108 @@ export function PromotionsSection() {
     
     fetchPromociones()
   }, [])
+
+  async function handleAgregarAlCarrito(promo: PromocionDisplay) {
+    try {
+      const authCheck = await fetch("/api/auth/me", { cache: "no-store" })
+      const authData = await authCheck.json()
+      
+      if (!authData.user || !authData.user.userId) {
+        toast.error("Debes iniciar sesión para agregar promociones al carrito")
+        router.push(`/login?next=/`)
+        return
+      }
+
+      if (authData.user.rolId !== 1) {
+        toast.error("Solo los clientes pueden agregar promociones al carrito")
+        return
+      }
+
+      setSelectedPromo(promo)
+      setSelectedDate("")
+      setShowDateDialog(true)
+    } catch (error) {
+      console.error("Error verificando autenticación:", error)
+      toast.error("Error al verificar autenticación")
+    }
+  }
+
+  async function handleConfirmarAgregar() {
+    if (!selectedPromo || !selectedDate) {
+      toast.error("Debes seleccionar una fecha")
+      return
+    }
+
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const fechaSeleccionada = new Date(selectedDate)
+    fechaSeleccionada.setHours(0, 0, 0, 0)
+
+    if (fechaSeleccionada < hoy) {
+      toast.error("La fecha no puede ser anterior a hoy")
+      return
+    }
+
+    setAddingToCart(true)
+    try {
+      // Verificar que tenemos el servicio_id
+      if (!selectedPromo.servicioId) {
+        throw new Error("No se pudo obtener la información del servicio")
+      }
+
+      // Crear o obtener una venta pendiente
+      const ventaRes = await fetch("/api/cliente/ventas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+
+      if (!ventaRes.ok) {
+        const errorData = await ventaRes.json()
+        throw new Error(errorData.error || "Error creando venta")
+      }
+
+      const ventaData = await ventaRes.json()
+      const idVenta = ventaData.id_venta
+
+      if (!idVenta) {
+        throw new Error("No se recibió el ID de venta")
+      }
+
+      // Agregar servicio al itinerario con descuento aplicado
+      const agregarRes = await fetch("/api/cliente/itinerarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id_venta: idVenta,
+          id_servicio: selectedPromo.servicioId,
+          fecha_inicio: selectedDate,
+          aplicar_descuento: true, // Aplicar el descuento activo
+        }),
+      })
+
+      if (!agregarRes.ok) {
+        const errorData = await agregarRes.json()
+        console.error("Error del servidor:", errorData)
+        throw new Error(errorData.error || "Error agregando al carrito")
+      }
+
+      toast.success("¡Promoción agregada al carrito!", {
+        description: "La promoción ha sido agregada a tu carrito de compras",
+      })
+
+      window.dispatchEvent(new Event("cart-updated"))
+      setShowDateDialog(false)
+      setSelectedPromo(null)
+      setSelectedDate("")
+    } catch (error: any) {
+      console.error("Error agregando promoción al carrito:", error)
+      toast.error(error.message || "Error al agregar la promoción al carrito")
+    } finally {
+      setAddingToCart(false)
+    }
+  }
+
   return (
     <section id="promotions" className="py-16 md:py-24">
       <div className="container mx-auto px-4">
@@ -146,9 +263,12 @@ export function PromotionsSection() {
                     <span className="text-sm text-muted-foreground">USD</span>
                   </div>
                 </div>
-                <Button className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90">
-                  Reservar Ahora
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                <Button 
+                  className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90"
+                  onClick={() => handleAgregarAlCarrito(promo)}
+                >
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  Agregar al Carrito
                 </Button>
               </div>
             </Card>
@@ -165,6 +285,48 @@ export function PromotionsSection() {
           </Button>
         </div>
       </div>
+
+      {/* Dialog para seleccionar fecha */}
+      <Dialog open={showDateDialog} onOpenChange={setShowDateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Seleccionar Fecha</DialogTitle>
+            <DialogDescription>
+              Selecciona la fecha de inicio para {selectedPromo?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="fecha">Fecha de inicio</Label>
+              <Input
+                id="fecha"
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDateDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmarAgregar} disabled={addingToCart || !selectedDate}>
+              {addingToCart ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Agregando...
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  Agregar al Carrito
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

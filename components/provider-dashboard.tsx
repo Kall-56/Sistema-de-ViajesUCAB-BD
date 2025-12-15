@@ -496,17 +496,35 @@ export function ProviderDashboard() {
     try {
       const r = await fetch(`/api/aerolineas/${id}`, { method: "DELETE" });
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.error ?? "Error eliminando aerolínea");
+      if (!r.ok) {
+        const errorMsg = data?.error ?? "Error eliminando servicio";
+        // Si hay información adicional, mostrarla
+        if (data?.tiene_itinerarios || data?.tiene_paquetes) {
+          toast.error("No se puede eliminar el servicio", {
+            description: errorMsg,
+            duration: 6000,
+          });
+        } else if (data?.tiene_descuentos) {
+          // Si solo tiene descuentos, intentar de nuevo (se eliminarán automáticamente)
+          toast.warning("Eliminando descuentos asociados...", {
+            description: "Los descuentos se eliminarán automáticamente. Intenta eliminar el servicio nuevamente.",
+            duration: 4000,
+          });
+        } else {
+          toast.error("Error", {
+            description: errorMsg,
+            duration: 5000,
+          });
+        }
+        throw new Error(errorMsg);
+      }
       
       toast.success("Servicio eliminado", {
-        description: "El servicio aéreo ha sido eliminado correctamente",
+        description: "El servicio aéreo ha sido eliminado correctamente. Si tenía descuentos, también fueron eliminados.",
       });
       
       await fetchAerolineas();
     } catch (err: any) {
-      toast.error("Error", {
-        description: err?.message ?? "No se pudo eliminar el servicio",
-      });
       setError(err?.message ?? "Error");
     }
   }

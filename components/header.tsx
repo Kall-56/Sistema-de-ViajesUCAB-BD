@@ -131,9 +131,9 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full border-b bg-white/95 dark:bg-slate-950/95 backdrop-blur-md supports-backdrop-filter:bg-white/80 dark:supports-backdrop-filter:bg-slate-950/80 shadow-sm overflow-x-hidden">
+      <header className="sticky top-0 z-50 w-full border-b bg-white/95 dark:bg-slate-950/95 backdrop-blur-md supports-backdrop-filter:bg-white/80 dark:supports-backdrop-filter:bg-slate-950/80 shadow-sm">
         <div className="container mx-auto px-4 py-3 max-w-full">
-          <div className="flex items-center justify-between gap-2 md:gap-4 min-w-0">
+          <div className="flex items-center justify-between gap-2 md:gap-3 lg:gap-4 min-w-0">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 shrink-0 hover:opacity-80 transition-opacity">
               <Image
@@ -148,7 +148,7 @@ export function Header() {
 
             <form
               onSubmit={handleSearch}
-              className="hidden md:flex flex-1 max-w-lg mx-2 lg:mx-4 min-w-0"
+              className="hidden md:flex flex-1 max-w-md lg:max-w-lg mx-2 lg:mx-3 min-w-0 shrink"
             >
               <div className="relative w-full min-w-0">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -162,42 +162,42 @@ export function Header() {
               </div>
             </form>
 
-            <nav className="hidden md:flex items-center gap-1 lg:gap-2 shrink-0">
+            <nav className="hidden md:flex items-center gap-1 lg:gap-1.5 shrink-0">
               <Link
                 href="/paquetes"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap"
+                className="flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap shrink-0"
               >
-                <Package className="h-4 w-4" />
+                <Package className="h-4 w-4 shrink-0" />
                 <span className="hidden lg:inline">Paquetes</span>
               </Link>
 
               <Link
                 href="/promociones"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap"
+                className="flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap shrink-0"
               >
-                <TrendingUp className="h-4 w-4" />
+                <TrendingUp className="h-4 w-4 shrink-0" />
                 <span className="hidden lg:inline">Promociones</span>
               </Link>
 
               <Link
                 href="/itinerario"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap"
+                className="flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap shrink-0"
               >
-                <Route className="h-4 w-4" />
+                <Route className="h-4 w-4 shrink-0" />
                 <span className="hidden lg:inline">Mi Itinerario</span>
               </Link>
 
               {/* Perfil: solo si hay sesión; si no, lleva a login */}
               <Link
                 href={sessionUser ? "/perfil" : "/login"}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap"
+                className="flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap shrink-0"
               >
-                <UserCircle className="h-4 w-4" />
+                <UserCircle className="h-4 w-4 shrink-0" />
                 <span className="hidden lg:inline">Perfil 360°</span>
               </Link>
 
               {/* Separador visual */}
-              <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
+              <div className="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-0.5 shrink-0" />
 
               {/* Botón Admin/Proveedor si aplica */}
               {dashboardLink && dashboardLabel && (
@@ -205,7 +205,7 @@ export function Header() {
                   asChild
                   variant="outline"
                   size="sm"
-                  className="gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap"
+                  className="gap-1.5 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap shrink-0 px-2 lg:px-3"
                 >
                   <Link href={dashboardLink}>{dashboardLabel}</Link>
                 </Button>
@@ -213,11 +213,11 @@ export function Header() {
 
               {/* Iniciar sesión vs Cerrar sesión */}
               {sessionUser ? (
-                <div className="flex items-center gap-1 lg:gap-2 shrink-0">
+                <div className="flex items-center gap-1 lg:gap-1.5 shrink-0">
                   {userInfo && (
-                    <div className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gradient-to-r from-[#E91E63]/10 to-[#C2185B]/10 border border-[#E91E63]/20 max-w-[180px] min-w-0">
-                      <span className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate">
-                        {userInfo.nombre.length > 15 ? `${userInfo.nombre.substring(0, 15)}...` : userInfo.nombre}
+                    <div className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-gradient-to-r from-[#E91E63]/10 to-[#C2185B]/10 border border-[#E91E63]/20 w-[160px] min-w-[160px] max-w-[160px] shrink-0">
+                      <span className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate flex-1 min-w-0">
+                        {userInfo.nombre}
                       </span>
                       <Badge className="bg-[#E91E63] text-white text-xs border-0 shrink-0">
                         {userInfo.rolNombre}
@@ -227,7 +227,7 @@ export function Header() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-1.5 lg:gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap shrink-0"
+                    className="gap-1.5 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap shrink-0 px-2 lg:px-3"
                     onClick={handleLogout}
                   >
                     <User className="h-4 w-4 shrink-0" />
@@ -238,10 +238,10 @@ export function Header() {
                 <Button
                   asChild
                   size="sm"
-                  className="gap-2 bg-[#E91E63] hover:bg-[#C2185B] text-white whitespace-nowrap"
+                  className="gap-1.5 bg-[#E91E63] hover:bg-[#C2185B] text-white whitespace-nowrap shrink-0 px-2 lg:px-3"
                 >
                   <Link href="/login">
-                    <User className="h-4 w-4" />
+                    <User className="h-4 w-4 shrink-0" />
                     <span className="hidden lg:inline">Iniciar Sesión</span>
                   </Link>
                 </Button>
@@ -251,7 +251,7 @@ export function Header() {
                 asChild
                 variant="outline"
                 size="sm"
-                className="gap-1.5 lg:gap-2 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 relative whitespace-nowrap shrink-0"
+                className="gap-1.5 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 relative whitespace-nowrap shrink-0 px-2 lg:px-3"
               >
                 <Link href="/carrito">
                   <ShoppingCart className="h-4 w-4 shrink-0" />

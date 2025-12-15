@@ -72,23 +72,26 @@ export async function POST(req: Request) {
       );
     }
 
-    // Convertir las fechas de string ISO a timestamp sin timezone
-    // PostgreSQL espera timestamps en formato 'YYYY-MM-DD HH:MM:SS' o ISO sin 'Z'
+    // Convertir las fechas de string ISO a formato PostgreSQL timestamp
+    // PostgreSQL espera timestamps en formato 'YYYY-MM-DD HH:MM:SS'
     const fechasTimestamp = fechas_inicio.map((fechaStr) => {
       const fecha = new Date(fechaStr);
       if (isNaN(fecha.getTime())) {
         throw new Error(`Fecha inválida: ${fechaStr}`);
       }
-      // Formato: 'YYYY-MM-DD HH:MM:SS' (sin timezone)
-      // Usamos toISOString() y removemos la 'Z' y los milisegundos
-      const isoString = fecha.toISOString();
-      // Remover 'Z' y milisegundos: "2024-01-15T10:30:00.000Z" -> "2024-01-15 10:30:00"
-      return isoString.replace('T', ' ').replace(/\.\d{3}Z?$/, '').replace('Z', '');
+      // Formatear como 'YYYY-MM-DD HH:MM:SS' (sin timezone)
+      const year = fecha.getFullYear();
+      const month = String(fecha.getMonth() + 1).padStart(2, '0');
+      const day = String(fecha.getDate()).padStart(2, '0');
+      const hours = String(fecha.getHours()).padStart(2, '0');
+      const minutes = String(fecha.getMinutes()).padStart(2, '0');
+      const seconds = String(fecha.getSeconds()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     });
 
     // Llamar a la función almacenada vender_paquete
-    // El driver pg convierte automáticamente arrays de JavaScript a arrays de PostgreSQL
-    // Retorna un array de IDs de itinerarios creados
+    // El driver pg puede necesitar que pasemos el array como string literal de PostgreSQL
+    // o podemos usar el casting explícito
     const { rows } = await pool.query(
       `SELECT vender_paquete($1, $2, $3::timestamp without time zone[]) AS ids_itinerarios`,
       [clienteId, id_paquete, fechasTimestamp]

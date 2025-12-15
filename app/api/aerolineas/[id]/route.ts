@@ -154,6 +154,71 @@ export async function DELETE(
   try {
     await assertOwnershipIfProveedor(id, auth.session, auth.isAdmin);
 
+    // Verificar si hay itinerarios que usan este servicio
+    const { rows: itinerarioRows } = await pool.query(
+      `SELECT COUNT(*) as count FROM itinerario WHERE fk_servicio = $1`,
+      [id]
+    );
+
+    const countItinerarios = itinerarioRows?.[0]?.count ? Number(itinerarioRows[0].count) : 0;
+
+    // Verificar si hay descuentos asociados
+    const { rows: descuentoRows } = await pool.query(
+      `SELECT COUNT(*) as count FROM descuento WHERE fk_servicio = $1`,
+      [id]
+    );
+
+    const countDescuentos = descuentoRows?.[0]?.count ? Number(descuentoRows[0].count) : 0;
+
+    // Si hay itinerarios, no se puede eliminar
+    if (countItinerarios > 0) {
+      return NextResponse.json(
+        { 
+          error: `No se puede eliminar el servicio porque tiene ${countItinerarios} itinerario(s) asociado(s). Si eres proveedor, contacta con el administrador para gestionar estos itinerarios. Si eres administrador, elimina primero los itinerarios desde la sección "Itinerarios" en el panel de administración.`,
+          tiene_itinerarios: true,
+          cantidad_itinerarios: countItinerarios
+        },
+        { status: 400 }
+      );
+    }
+
+    // Si hay descuentos, eliminarlos automáticamente antes de eliminar el servicio
+    if (countDescuentos > 0) {
+      try {
+        await pool.query(`DELETE FROM descuento WHERE fk_servicio = $1`, [id]);
+        // Continuar con la eliminación del servicio
+      } catch (descError: any) {
+        return NextResponse.json(
+          { 
+            error: `No se puede eliminar el servicio porque tiene ${countDescuentos} descuento(s) asociado(s) y no se pudieron eliminar automáticamente. Contacta con el administrador.`,
+            tiene_descuentos: true,
+            cantidad_descuentos: countDescuentos
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Verificar si está en algún paquete
+    const { rows: paqueteRows } = await pool.query(
+      `SELECT COUNT(*) as count FROM paquete_servicio WHERE fk_servicio = $1`,
+      [id]
+    );
+
+    const countPaquetes = paqueteRows?.[0]?.count ? Number(paqueteRows[0].count) : 0;
+
+    if (countPaquetes > 0) {
+      return NextResponse.json(
+        { 
+          error: `No se puede eliminar el servicio porque está incluido en ${countPaquetes} paquete(s). Elimine primero el servicio de los paquetes relacionados.`,
+          tiene_paquetes: true,
+          cantidad_paquetes: countPaquetes
+        },
+        { status: 400 }
+      );
+    }
+
+    // Si todo está bien, eliminar el servicio
     const { rows } = await pool.query(
       `SELECT eliminar_servicio_viaje_aereolinea($1) AS id`,
       [id]
@@ -161,6 +226,39 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true, id: rows[0]?.id });
   } catch (e: any) {
+    // Si el error es de foreign key constraint, dar un mensaje más claro
+    if (e?.message?.includes("foreign key constraint")) {
+      if (e?.message?.includes("descuento_servicio_fk")) {
+        return NextResponse.json(
+          { 
+            error: "No se puede eliminar el servicio porque tiene descuentos asociados. Contacta con el administrador para gestionar estos descuentos o intenta nuevamente (se eliminarán automáticamente)." 
+          },
+          { status: 400 }
+        );
+      }
+      if (e?.message?.includes("paquete_servicio_fk")) {
+        return NextResponse.json(
+          { 
+            error: "No se puede eliminar el servicio porque está incluido en uno o más paquetes. Elimine primero el servicio de los paquetes relacionados." 
+          },
+          { status: 400 }
+        );
+      }
+      if (e?.message?.includes("itinerario") || e?.message?.includes("fk_servicio")) {
+        return NextResponse.json(
+          { 
+            error: "No se puede eliminar el servicio porque tiene itinerarios asociados. Si eres proveedor, contacta con el administrador. Si eres administrador, elimina primero los itinerarios desde la sección 'Itinerarios'." 
+          },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json(
+        { 
+          error: "No se puede eliminar el servicio porque está siendo utilizado en otras partes del sistema. Contacta con el administrador para más información." 
+        },
+        { status: 400 }
+      );
+    }
     return NextResponse.json({ error: e?.message ?? "Error" }, { status: 403 });
   }
 }

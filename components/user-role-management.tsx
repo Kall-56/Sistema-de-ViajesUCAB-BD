@@ -27,8 +27,11 @@ import {
   Shield,
   Save,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 type Rol = { id: number; nombre: string };
 type Cliente = { id: number; nombre: string };
@@ -63,6 +66,9 @@ export function UserRoleManagement() {
   const [proveedorId, setProveedorId] = useState<string>("");
 
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPageRoles, setCurrentPageRoles] = useState(1);
+  const itemsPerPage = 10;
 
   const rolesById = useMemo(
     () => new Map(roles.map((r) => [r.id, r.nombre])),
@@ -119,6 +125,18 @@ export function UserRoleManagement() {
     return usuarios.filter((u) => u.email.toLowerCase().includes(t));
   }, [usuarios, searchTerm]);
 
+  // Paginación para usuarios
+  const totalPagesUsuarios = Math.ceil(filteredUsuarios.length / itemsPerPage);
+  const startIndexUsuarios = (currentPage - 1) * itemsPerPage;
+  const endIndexUsuarios = startIndexUsuarios + itemsPerPage;
+  const paginatedUsuarios = filteredUsuarios.slice(startIndexUsuarios, endIndexUsuarios);
+
+  // Paginación para roles
+  const totalPagesRoles = Math.ceil(roles.length / itemsPerPage);
+  const startIndexRoles = (currentPageRoles - 1) * itemsPerPage;
+  const endIndexRoles = startIndexRoles + itemsPerPage;
+  const paginatedRoles = roles.slice(startIndexRoles, endIndexRoles);
+
   const resetUserForm = () => {
     setEmail("");
     setPassword("");
@@ -130,12 +148,12 @@ export function UserRoleManagement() {
   const handleCreateUser = async () => {
     // Validaciones Modo 1 (respetan el CHECK de tu tabla usuario)
     if (!email || !password || !rolId) {
-      alert("Email, contraseña y rol son obligatorios.");
+      toast.error("Email, contraseña y rol son obligatorios.");
       return;
     }
     const both = clienteId && proveedorId;
     if (both) {
-      alert("Selecciona solo Cliente o solo Proveedor (no ambos).");
+      toast.error("Selecciona solo Cliente o solo Proveedor (no ambos).");
       return;
     }
 
@@ -145,15 +163,15 @@ export function UserRoleManagement() {
     // rol admin => ambos null
     const rId = Number(rolId);
     if (rId === 1 && !clienteId) {
-      alert("Para rol Cliente debes seleccionar un cliente existente.");
+      toast.error("Para rol Cliente debes seleccionar un cliente existente.");
       return;
     }
     if (rId === 2 && !proveedorId) {
-      alert("Para rol Proveedor debes seleccionar un proveedor existente.");
+      toast.error("Para rol Proveedor debes seleccionar un proveedor existente.");
       return;
     }
     if (rId === 3 && (clienteId || proveedorId)) {
-      alert("Para rol Admin no debes asociar cliente/proveedor.");
+      toast.error("Para rol Admin no debes asociar cliente/proveedor.");
       return;
     }
 
@@ -173,13 +191,13 @@ export function UserRoleManagement() {
 
     const data = await res.json();
     if (!res.ok) {
-      alert(data.error ?? "Error creando usuario");
+      toast.error(data.error ?? "Error creando usuario");
       return;
     }
 
     resetUserForm();
     await loadAll();
-    alert(`Usuario creado (id: ${data.id})`);
+    toast.success(`Usuario creado (id: ${data.id})`);
   };
 
   const toggleActivo = async (id: number, activo: 0 | 1) => {
@@ -190,7 +208,7 @@ export function UserRoleManagement() {
     });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.error ?? "Error actualizando estatus");
+      toast.error(data.error ?? "Error actualizando estatus");
       return;
     }
     await loadAll();
@@ -204,7 +222,7 @@ export function UserRoleManagement() {
     const res = await fetch(`/api/admin/roles/${id}`, { method: "GET" });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.error ?? "Error cargando rol");
+      toast.error(data.error ?? "Error cargando rol");
       return;
     }
 
@@ -225,7 +243,7 @@ export function UserRoleManagement() {
 
   const handleCreateRole = async () => {
     if (!newRoleNombre.trim() || newRolePermisos.length === 0) {
-      alert("Nombre y al menos 1 permiso son obligatorios.");
+      toast.error("Nombre y al menos 1 permiso son obligatorios.");
       return;
     }
 
@@ -240,14 +258,14 @@ export function UserRoleManagement() {
 
     const data = await res.json();
     if (!res.ok) {
-      alert(data.error ?? "Error creando rol");
+      toast.error(data.error ?? "Error creando rol");
       return;
     }
 
     setNewRoleNombre("");
     setNewRolePermisos([]);
     await loadAll();
-    alert("Rol creado");
+    toast.success("Rol creado");
   };
 
   const handleSaveRole = async () => {
@@ -264,12 +282,12 @@ export function UserRoleManagement() {
 
     const data = await res.json();
     if (!res.ok) {
-      alert(data.error ?? "Error actualizando rol");
+      toast.error(data.error ?? "Error actualizando rol");
       return;
     }
 
     await loadAll();
-    alert("Rol actualizado");
+    toast.success("Rol actualizado");
   };
 
   const handleDeleteRole = async () => {
@@ -281,7 +299,7 @@ export function UserRoleManagement() {
 
     const data = await res.json();
     if (!res.ok) {
-      alert(data.error ?? "No se pudo eliminar el rol");
+      toast.error(data.error ?? "No se pudo eliminar el rol");
       return;
     }
 
@@ -289,7 +307,7 @@ export function UserRoleManagement() {
     setRoleNombre("");
     setRolePermisos([]);
     await loadAll();
-    alert("Rol eliminado");
+    toast.success("Rol eliminado");
   };
 
   return (
@@ -447,7 +465,7 @@ export function UserRoleManagement() {
           </div>
 
           <div className="space-y-3">
-            {filteredUsuarios.map((u) => {
+            {paginatedUsuarios.map((u) => {
               const rolName = rolesById.get(u.fk_rol) ?? `rol ${u.fk_rol}`;
               return (
                 <div

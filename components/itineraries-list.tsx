@@ -165,7 +165,9 @@ export function ItinerariesList() {
   function calcularTotal(venta: Venta): number {
     if (!venta.items || venta.items.length === 0) return 0
     return venta.items.reduce((sum: number, item: any) => {
-      return sum + Number(item.costo_unitario_usd || 0)
+      // Priorizar costo_unitario_bs (ya convertido a Bs), sino usar costo_unitario_usd como fallback
+      const costo = Number(item.costo_unitario_bs || item.costo_unitario_usd || 0)
+      return sum + costo
     }, 0)
   }
 
@@ -225,7 +227,7 @@ export function ItinerariesList() {
       })
 
       // Preparar datos de la tabla
-      const headers = [["#", "Tipo", "Servicio", "Fecha Inicio", "Costo (USD)"]]
+      const headers = [["#", "Tipo", "Servicio", "Fecha Inicio", "Costo (Bs.)"]]
       const rows = itemsOrdenados.map((item: any, index: number) => [
         String(index + 1),
         getTypeLabel(item.tipo_servicio),
@@ -237,10 +239,10 @@ export function ItinerariesList() {
               year: "numeric"
             })
           : "N/A",
-        (item.costo_unitario_usd || 0).toLocaleString("es-VE", {
-          style: "currency",
-          currency: "USD"
-        })
+        `Bs. ${Number(item.costo_unitario_bs || item.costo_unitario_usd || 0).toLocaleString("es-VE", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`
       ])
 
       // Agregar tabla
@@ -263,9 +265,10 @@ export function ItinerariesList() {
         margin: { top: 10, left: 14, right: 14 },
       })
 
-      // Calcular total
+      // Calcular total en Bs
       const total = items.reduce((sum: number, item: any) => {
-        return sum + Number(item.costo_unitario_usd || 0)
+        const costo = Number(item.costo_unitario_bs || item.costo_unitario_usd || 0)
+        return sum + costo
       }, 0)
 
       // Agregar total
@@ -276,10 +279,10 @@ export function ItinerariesList() {
       doc.setFontSize(14)
       doc.setTextColor(233, 30, 99)
       doc.text(
-        total.toLocaleString("es-VE", {
-          style: "currency",
-          currency: "USD"
-        }),
+        `Bs. ${total.toLocaleString("es-VE", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`,
         14,
         finalY + 22
       )
@@ -375,9 +378,11 @@ export function ItinerariesList() {
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {ventas.map((venta) => {
+            {ventas.map((venta, index) => {
               const tienePasadas = tieneFechasPasadas(venta)
               const total = calcularTotal(venta)
+              // Mostrar número secuencial (1, 2, 3...) en lugar del ID de BD
+              const numeroSecuencial = index + 1
 
               return (
                 <Card key={venta.id_venta} className="relative">
@@ -392,7 +397,7 @@ export function ItinerariesList() {
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div>
-                        <CardTitle className="text-lg">Itinerario #{venta.id_venta}</CardTitle>
+                        <CardTitle className="text-lg">Itinerario #{numeroSecuencial}</CardTitle>
                         <CardDescription>
                           {venta.cantidad_items || 0} servicio{venta.cantidad_items !== 1 ? "s" : ""}
                         </CardDescription>
@@ -420,7 +425,7 @@ export function ItinerariesList() {
                       <span className="text-lg font-bold text-[#E91E63]">
                         {total.toLocaleString("es-VE", {
                           style: "currency",
-                          currency: "USD",
+                          currency: "VES",
                         })}
                       </span>
                     </div>

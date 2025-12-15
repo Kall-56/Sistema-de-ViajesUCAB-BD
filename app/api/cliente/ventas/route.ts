@@ -21,19 +21,37 @@ export async function GET() {
         v.monto_compensacion,
         (SELECT COUNT(*) FROM itinerario i WHERE i.fk_venta = v.id_venta) AS cantidad_items,
         (SELECT MIN(i.fecha_hora_inicio) FROM itinerario i WHERE i.fk_venta = v.id_venta) AS fecha_inicio_minima,
-        (SELECT array_agg(
-          json_build_object(
-            'id_itinerario', i.id,
-            'id_servicio', i.fk_servicio,
-            'nombre_servicio', s.nombre,
-            'costo_unitario_usd', COALESCE(i.costo_especial, s.costo_servicio),
-            'fecha_inicio', i.fecha_hora_inicio,
-            'tipo_servicio', s.tipo_servicio
-          )
-        )
-        FROM itinerario i
-        JOIN servicio s ON s.id = i.fk_servicio
-        WHERE i.fk_venta = v.id_venta) AS items
+            (SELECT array_agg(
+              json_build_object(
+                'id_itinerario', i.id,
+                'id_servicio', i.fk_servicio,
+                'nombre_servicio', s.nombre,
+                'costo_unitario_original', COALESCE(i.costo_especial, s.costo_servicio),
+                'costo_unitario_bs',
+                  CASE 
+                    WHEN s.denominacion != 'VEN' THEN
+                      COALESCE(i.costo_especial, s.costo_servicio) * 
+                      COALESCE(
+                        (SELECT cantidad_cambio 
+                         FROM cambio_moneda 
+                         WHERE denominacion = s.denominacion 
+                           AND fecha_fin IS NULL 
+                         ORDER BY fecha_inicio DESC 
+                         LIMIT 1), 
+                        1
+                      )
+                    ELSE
+                      COALESCE(i.costo_especial, s.costo_servicio)
+                  END,
+                'fecha_inicio', i.fecha_hora_inicio,
+                'tipo_servicio', s.tipo_servicio,
+                'denominacion_original', s.denominacion,
+                'denominacion', 'VEN'
+              )
+            )
+            FROM itinerario i
+            JOIN servicio s ON s.id = i.fk_servicio
+            WHERE i.fk_venta = v.id_venta) AS items
       FROM venta v
       WHERE v.fk_cliente = $1
         AND EXISTS (

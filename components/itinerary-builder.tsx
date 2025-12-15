@@ -49,9 +49,13 @@ type ItineraryItem = {
   id_itinerario: number;
   id_servicio: number;
   nombre_servicio: string;
-  costo_unitario_usd: number;
+  costo_unitario_usd?: number; // Mantener para compatibilidad
+  costo_unitario_original?: number; // Precio original antes de conversión
+  costo_unitario_bs?: number; // Precio convertido a Bs
   fecha_inicio: string;
   tipo_servicio: string;
+  denominacion?: string; // Siempre 'VEN' para precios convertidos
+  denominacion_original?: string; // Denominación original del servicio
 };
 
 type Venta = {
@@ -251,8 +255,13 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
     )
   }, [servicios, searchServicio])
 
+  // Calcular total en Bs (usar costo_unitario_bs si existe, sino costo_unitario_usd como fallback)
   const totalPrice = useMemo(() => {
-    return items.reduce((sum, item) => sum + Number(item.costo_unitario_usd || 0), 0)
+    return items.reduce((sum, item) => {
+      // Priorizar costo_unitario_bs (ya convertido a Bs), sino usar costo_unitario_usd como fallback
+      const costo = Number(item.costo_unitario_bs || item.costo_unitario_usd || 0)
+      return sum + costo
+    }, 0)
   }, [items])
 
   const getIcon = (tipoServicio: string | null | undefined) => {
@@ -314,7 +323,7 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
       })
 
       // Preparar datos de la tabla
-      const headers = [["#", "Tipo", "Servicio", "Fecha Inicio", "Costo (USD)"]]
+      const headers = [["#", "Tipo", "Servicio", "Fecha Inicio", "Costo (Bs.)"]]
       const rows = itemsOrdenados.map((item, index) => [
         String(index + 1),
         getTypeLabel(item.tipo_servicio),
@@ -326,10 +335,10 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
               year: "numeric"
             })
           : "N/A",
-        (item.costo_unitario_usd || 0).toLocaleString("es-VE", {
-          style: "currency",
-          currency: "USD"
-        })
+        `Bs. ${Number(item.costo_unitario_bs || item.costo_unitario_usd || 0).toLocaleString("es-VE", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`
       ])
 
       // Agregar tabla
@@ -555,10 +564,10 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
                                 <div className="flex items-center justify-between pt-2 border-t">
                                   <span className="text-xs md:text-sm text-muted-foreground">Costo:</span>
                                   <span className="font-semibold text-[#E91E63] text-sm md:text-base">
-                                    {item.costo_unitario_usd?.toLocaleString("es-VE", {
-                                      style: "currency",
-                                      currency: "USD",
-                                    }) || "$0"}
+                                    Bs. {Number(item.costo_unitario_bs || item.costo_unitario_usd || 0).toLocaleString("es-VE", {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
                                   </span>
                                 </div>
                               </CardContent>
@@ -596,10 +605,10 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
                             {getTypeLabel(item.tipo_servicio)}
                           </span>
                           <span className="font-medium whitespace-nowrap shrink-0">
-                            {item.costo_unitario_usd?.toLocaleString("es-VE", {
-                              style: "currency",
-                              currency: "USD",
-                            }) || "$0"}
+                            Bs. {Number(item.costo_unitario_bs || item.costo_unitario_usd || 0).toLocaleString("es-VE", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </span>
                         </div>
                       ))
@@ -609,9 +618,9 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
                   <div className="flex justify-between items-center">
                     <span className="font-semibold text-lg">Total</span>
                     <span className="font-bold text-2xl text-[#E91E63]">
-                      {totalPrice.toLocaleString("es-VE", {
-                        style: "currency",
-                        currency: "USD",
+                      Bs. {totalPrice.toLocaleString("es-VE", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
                       })}
                     </span>
                   </div>

@@ -30,6 +30,7 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Link from "next/link"
 
 type ItinerarioItem = {
@@ -38,9 +39,12 @@ type ItinerarioItem = {
   nombre_servicio: string
   descripcion_servicio?: string
   costo_unitario_usd: number
+  costo_unitario_bs?: number // Precio convertido a Bs
+  costo_unitario_original?: number // Precio original antes de conversión
   fecha_inicio: string
   tipo_servicio: string
   denominacion: string
+  denominacion_original?: string // Denominación original del servicio
   lugar_nombre?: string
 }
 
@@ -53,11 +57,27 @@ type VentaCarrito = {
   items: ItinerarioItem[] | null
 }
 
+type CambiosCarrito = {
+  hay_cambios: boolean
+  items_precio_cambiado: number
+  items_no_disponibles: number
+  servicios_no_disponibles: Array<{
+    id_itinerario: number
+    nombre: string
+  }>
+  items_precio_actualizado?: Array<{
+    id_itinerario: number
+    nombre: string
+  }>
+}
+
 export function CartCheckout() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [ventas, setVentas] = useState<VentaCarrito[]>([])
+  const [cambios, setCambios] = useState<CambiosCarrito | null>(null)
+  const [tasaCambioUSD, setTasaCambioUSD] = useState<number>(36.5) // Valor por defecto
   const [removing, setRemoving] = useState<number | null>(null)
   const [paymentMethod, setPaymentMethod] = useState("credit-card")
   const [installments, setInstallments] = useState("1")
@@ -87,6 +107,25 @@ export function CartCheckout() {
       const data = await r.json()
       if (r.ok) {
         setVentas(Array.isArray(data?.items) ? data.items : [])
+        setCambios(data?.cambios || null)
+        
+        // Mostrar notificación si hay cambios
+        if (data?.cambios?.hay_cambios) {
+          const mensajes: string[] = []
+          if (data.cambios.items_precio_cambiado > 0) {
+            mensajes.push(`${data.cambios.items_precio_cambiado} artículo(s) cambiaron de precio`)
+          }
+          if (data.cambios.items_no_disponibles > 0) {
+            mensajes.push(`${data.cambios.items_no_disponibles} artículo(s) ya no están disponibles`)
+          }
+          
+          if (mensajes.length > 0) {
+            toast.warning("Cambios en tu carrito", {
+              description: mensajes.join(". "),
+              duration: 6000,
+            })
+          }
+        }
       } else {
         if (r.status === 401 || r.status === 403) {
           router.push("/login?next=/carrito")
@@ -103,6 +142,7 @@ export function CartCheckout() {
       setLoading(false)
     }
   }
+
 
   async function removeItinerario(idVenta: number) {
     setRemoving(idVenta)
@@ -145,15 +185,37 @@ export function CartCheckout() {
     return tipoServicio
   }
 
-  // Calcular totales
+  // Calcular totales en Bs (usar costo_unitario_bs si existe, sino costo_unitario_usd como fallback)
   const totalVentas = ventas.reduce((sum, venta) => {
     if (!venta.items || venta.items.length === 0) return sum
-    return sum + venta.items.reduce((itemSum, item) => itemSum + Number(item.costo_unitario_usd || 0), 0)
+    return sum + venta.items.reduce((itemSum, item) => {
+      // Priorizar costo_unitario_bs (ya convertido a Bs), sino usar costo_unitario_usd como fallback
+      const costo = Number(item.costo_unitario_bs || item.costo_unitario_usd || 0)
+      return itemSum + costo
+    }, 0)
+  }, 0)
+
+  // Calcular descuentos totales de promociones (en Bs)
+  const descuentosPromociones = ventas.reduce((sum, venta) => {
+    if (!venta.items || venta.items.length === 0) return sum
+    return sum + venta.items.reduce((itemSum, item) => {
+      if (item.tiene_descuento && item.descuento_aplicado) {
+        // Convertir descuento a Bs si la denominación original no es VEN
+        const descuentoOriginal = Number(item.descuento_aplicado || 0)
+        if (item.denominacion_original && item.denominacion_original !== 'VEN') {
+          return itemSum + (descuentoOriginal * tasaCambioUSD) // Usar tasa de cambio para convertir
+        }
+        return itemSum + descuentoOriginal
+      }
+      return itemSum
+    }, 0)
   }, 0)
 
   const taxes = totalVentas * 0.12 // 12% tax
-  const milesDiscount = useMiles ? Number.parseInt(milesAmount) * 0.01 : 0
-  const total = totalVentas + taxes - milesDiscount
+  // Descuento por millas: 1 milla = $0.01 USD, convertimos a Bs usando tasa de cambio real
+  const milesDiscountUSD = useMiles ? Number.parseInt(milesAmount) * 0.01 : 0
+  const milesDiscount = milesDiscountUSD * tasaCambioUSD // Convertir a Bs usando tasa real
+  const total = totalVentas + taxes - descuentosPromociones - milesDiscount
 
   // Contar total de servicios
   const totalServicios = ventas.reduce((sum, venta) => sum + (venta.items?.length || 0), 0)
@@ -219,11 +281,52 @@ export function CartCheckout() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {ventas.map((venta, ventaIdx) => (
+                  {/* Mensaje de cambios en el carrito */}
+                  {cambios?.hay_cambios && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900 p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-amber-900 dark:text-amber-100 mb-1">
+                            Cambios en tu carrito
+                          </h4>
+                          <div className="text-sm text-amber-800 dark:text-amber-200 space-y-1">
+                            {cambios.items_precio_cambiado > 0 && (
+                              <p>
+                                • {cambios.items_precio_cambiado} artículo(s) {cambios.items_precio_cambiado === 1 ? "cambió" : "cambiaron"} de precio. 
+                                Los precios han sido actualizados automáticamente.
+                              </p>
+                            )}
+                            {cambios.items_no_disponibles > 0 && (
+                              <p>
+                                • {cambios.items_no_disponibles} artículo(s) {cambios.items_no_disponibles === 1 ? "ya no está" : "ya no están"} disponible(s). 
+                                Por favor, elimínalo(s) de tu carrito para continuar.
+                              </p>
+                            )}
+                            {cambios.servicios_no_disponibles && cambios.servicios_no_disponibles.length > 0 && (
+                              <div className="mt-2">
+                                <p className="font-medium mb-1">Servicios no disponibles:</p>
+                                <ul className="list-disc list-inside space-y-0.5">
+                                  {cambios.servicios_no_disponibles.map((s) => (
+                                    <li key={s.id_itinerario}>{s.nombre}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {ventas.map((venta, ventaIdx) => {
+                    // Mostrar número secuencial (1, 2, 3...) en lugar del ID de BD
+                    const numeroSecuencial = ventaIdx + 1
+                    return (
                     <div key={venta.id_venta}>
                       <div className="flex items-start justify-between mb-4">
                         <div>
-                          <h3 className="font-semibold text-lg">Itinerario #{venta.id_venta}</h3>
+                          <h3 className="font-semibold text-lg">Itinerario #{numeroSecuencial}</h3>
                           {venta.fecha_inicio_minima && (
                             <p className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
                               <Calendar className="h-3 w-3" />
@@ -254,14 +357,32 @@ export function CartCheckout() {
                       <div className="space-y-3">
                         {venta.items && venta.items.length > 0 ? (
                           venta.items.map((item, itemIdx) => (
-                            <div key={item.id_itinerario} className="flex gap-4 p-3 rounded-lg border bg-card">
+                            <div 
+                              key={item.id_itinerario} 
+                              className={`flex gap-4 p-3 rounded-lg border bg-card ${
+                                !item.servicio_activo ? 'border-destructive/50 bg-destructive/5' : 
+                                item.precio_cambiado ? 'border-amber-200 bg-amber-50/50 dark:bg-amber-950/10' : ''
+                              }`}
+                            >
                               <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-[#E91E63]/20 to-[#C2185B]/20 flex items-center justify-center shrink-0">
                                 {getIcon(item.tipo_servicio)}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-start justify-between mb-2">
                                   <div className="flex-1 min-w-0">
-                                    <h4 className="font-semibold truncate">{item.nombre_servicio}</h4>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="font-semibold truncate">{item.nombre_servicio}</h4>
+                                      {!item.servicio_activo && (
+                                        <Badge variant="destructive" className="text-xs">
+                                          No disponible
+                                        </Badge>
+                                      )}
+                                      {item.precio_cambiado && item.servicio_activo && (
+                                        <Badge variant="outline" className="text-xs border-amber-300 text-amber-700 dark:text-amber-400">
+                                          Precio actualizado
+                                        </Badge>
+                                      )}
+                                    </div>
                                     {item.lugar_nombre && (
                                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                                         <MapPin className="h-3 w-3" />
@@ -286,12 +407,30 @@ export function CartCheckout() {
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <span className="text-sm text-muted-foreground">Costo:</span>
-                                  <span className="font-bold text-[#E91E63]">
-                                    {Number(item.costo_unitario_usd || 0).toLocaleString("es-VE", {
-                                      style: "currency",
-                                      currency: item.denominacion || "USD",
-                                    })}
-                                  </span>
+                                  <div className="flex flex-col items-end gap-1">
+                                    {item.tiene_descuento && item.costo_unitario_sin_descuento && (
+                                      <span className="text-xs text-muted-foreground line-through">
+                                        Bs. {Number(item.costo_unitario_sin_descuento).toLocaleString("es-VE", {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
+                                      </span>
+                                    )}
+                                    <span className="font-bold text-[#E91E63]">
+                                      Bs. {Number(item.costo_unitario_bs || item.costo_unitario_usd || 0).toLocaleString("es-VE", {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}
+                                    </span>
+                                    {item.tiene_descuento && item.descuento_aplicado && (
+                                      <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100 text-xs">
+                                        Ahorras Bs. {Number(item.descuento_aplicado).toLocaleString("es-VE", {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -305,7 +444,8 @@ export function CartCheckout() {
 
                       {ventaIdx < ventas.length - 1 && <Separator className="my-6" />}
                     </div>
-                  ))}
+                  )
+                  })}
                 </CardContent>
               </Card>
 
@@ -440,7 +580,9 @@ export function CartCheckout() {
                         value={milesAmount}
                         onChange={(e) => setMilesAmount(e.target.value)}
                       />
-                      <p className="text-xs text-muted-foreground">1 milla = $0.01 USD. Descuento máximo: $154.20</p>
+                      <p className="text-xs text-muted-foreground">
+                        1 milla = Bs. {(0.01 * tasaCambioUSD).toFixed(2)}. Descuento máximo: Bs. {(15420 * 0.01 * tasaCambioUSD).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -460,28 +602,39 @@ export function CartCheckout() {
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Subtotal</span>
                         <span className="font-medium">
-                          {totalVentas.toLocaleString("es-VE", {
-                            style: "currency",
-                            currency: "USD",
+                          Bs. {totalVentas.toLocaleString("es-VE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
                           })}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Impuestos y tasas (12%)</span>
                         <span className="font-medium">
-                          {taxes.toLocaleString("es-VE", {
-                            style: "currency",
-                            currency: "USD",
+                          Bs. {taxes.toLocaleString("es-VE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
                           })}
                         </span>
                       </div>
+                      {descuentosPromociones > 0 && (
+                        <div className="flex justify-between text-sm text-green-600">
+                          <span>Descuento por promociones</span>
+                          <span className="font-medium">
+                            -Bs. {descuentosPromociones.toLocaleString("es-VE", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
+                      )}
                       {useMiles && milesDiscount > 0 && (
                         <div className="flex justify-between text-sm text-green-600">
                           <span>Descuento por millas</span>
                           <span className="font-medium">
-                            -{milesDiscount.toLocaleString("es-VE", {
-                              style: "currency",
-                              currency: "USD",
+                            -Bs. {milesDiscount.toLocaleString("es-VE", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
                             })}
                           </span>
                         </div>
@@ -490,18 +643,18 @@ export function CartCheckout() {
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-lg">Total a pagar</span>
                         <span className="text-3xl font-bold text-[#E91E63]">
-                          {total.toLocaleString("es-VE", {
-                            style: "currency",
-                            currency: "USD",
+                          Bs. {total.toLocaleString("es-VE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
                           })}
                         </span>
                       </div>
                       {installments !== "1" && (
                         <p className="text-xs text-muted-foreground">
                           {installments} cuotas de{" "}
-                          {(total / Number.parseInt(installments)).toLocaleString("es-VE", {
-                            style: "currency",
-                            currency: "USD",
+                          Bs. {(total / Number.parseInt(installments)).toLocaleString("es-VE", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
                           })}
                         </p>
                       )}
@@ -581,6 +734,7 @@ export function CartCheckout() {
           </div>
         )}
       </div>
+
     </div>
   )
 }

@@ -363,9 +363,6 @@ export function PackagesGrid() {
                   >
                     Ver Detalles
                   </Button>
-                  <Button variant="outline" size="sm">
-                    Agregar
-                  </Button>
                 </div>
               </div>
             </Card>

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Tag, Plus, Edit, Trash2, Search, ChevronLeft, Loader2, AlertCircle } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
+import { toast } from "sonner"
 
 type Servicio = {
   id: number;
@@ -176,7 +177,26 @@ export function PromotionManagement() {
       })
 
       const data = await r.json()
-      if (!r.ok) throw new Error(data?.error ?? "Error creando descuento")
+      if (!r.ok) {
+        const errorMsg = data?.error ?? "Error creando descuento"
+        toast.error("Error creando promoción", {
+          description: errorMsg,
+          duration: 5000,
+        })
+        throw new Error(errorMsg)
+      }
+
+      // Mostrar advertencia si existe
+      if (data?.warning) {
+        toast.warning("Promoción creada", {
+          description: data.warning,
+          duration: 4000,
+        })
+      } else {
+        toast.success("Promoción creada", {
+          description: "La promoción ha sido creada correctamente",
+        })
+      }
 
       setView("list")
       setCFkServicio("")
