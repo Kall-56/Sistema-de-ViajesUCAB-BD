@@ -23,6 +23,11 @@ export async function GET(
   req: Request,
   { params }: { params: { nombre: string } }
 ) {
+  // Declarar variables fuera del try para que estén disponibles en el catch
+  let paramsArray: any[] = [];
+  let paramPlaceholders: string[] = [];
+  let query = "";
+
   try {
     // Verificar autenticación y permisos (solo admin)
     // requirePermission(permisoId) - asumimos que el permiso 1 es para ver reportes
@@ -67,19 +72,19 @@ export async function GET(
     
     // SPs que solo aceptan fecha_inicio y fecha_fin (sin limite)
     const spsSinLimite = [
-      "rep_ventas_periodo",
-      "rep_ingresos_metodos_pago"
+      "rep_ventas_periodo"
     ];
     
     // SPs que aceptan fecha_inicio, fecha_fin y limite
     const spsConLimite = [
       "rep_clientes_activos",
-      "rep_servicios_populares"
+      "rep_servicios_populares",
+      "rep_proveedores_mas_vendidos"
     ];
 
     // Construir parámetros para el stored procedure
-    const paramsArray: any[] = [];
-    const paramPlaceholders: string[] = [];
+    paramsArray = [];
+    paramPlaceholders = [];
     let paramIndex = 1;
 
     // Si el SP no tiene parámetros, llamarlo sin argumentos
@@ -114,7 +119,7 @@ export async function GET(
     }
 
     // Construir la llamada al stored procedure
-    const query = `SELECT * FROM ${nombreReporte}(${paramPlaceholders.join(", ")})`;
+    query = `SELECT * FROM ${nombreReporte}(${paramPlaceholders.join(", ")})`;
 
     // Log para debugging (solo en desarrollo)
     if (process.env.NODE_ENV === "development") {
@@ -124,7 +129,31 @@ export async function GET(
     }
 
     // Ejecutar el stored procedure
-    const result = await pool.query(query, paramsArray);
+    // Para rep_ventas_periodo, necesitamos convertir bigint a integer en la columna cantidad_items
+    let result = await pool.query(query, paramsArray);
+    
+    // Convertir bigint a number para columnas que puedan causar problemas
+    // Aplicar a todos los reportes que puedan devolver bigint
+    const reportesConBigint = [
+      "rep_ventas_periodo", 
+      "rep_clientes_activos",
+      "rep_proveedores_mas_vendidos"
+    ];
+    
+    if (reportesConBigint.includes(nombreReporte)) {
+      result.rows = result.rows.map((row: any) => {
+        const converted: any = {};
+        for (const [key, value] of Object.entries(row)) {
+          // Convertir bigint a number para evitar problemas de serialización
+          if (typeof value === 'bigint' || (typeof value === 'object' && value?.constructor?.name === 'BigInt')) {
+            converted[key] = Number(value);
+          } else {
+            converted[key] = value;
+          }
+        }
+        return converted;
+      });
+    }
 
     return NextResponse.json({
       reporte: nombreReporte,
@@ -141,7 +170,7 @@ export async function GET(
   } catch (error: any) {
     console.error(`Error ejecutando reporte ${params.nombre}:`, error);
     console.error("Error completo:", error);
-    console.error("Query ejecutada:", `SELECT * FROM ${params.nombre}(${paramPlaceholders?.join(", ") || "N/A"})`);
+    console.error("Query ejecutada:", query || `SELECT * FROM ${params.nombre}(...)`);
     console.error("Parámetros enviados:", paramsArray);
     
     // Errores específicos de PostgreSQL

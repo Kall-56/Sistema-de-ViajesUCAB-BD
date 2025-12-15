@@ -51,6 +51,106 @@ interface ReporteDef {
   };
 }
 
+// Funciones helper para formatear datos
+const formatDate = (value: any): string => {
+  if (!value) return "-"
+  try {
+    const date = new Date(value)
+    if (isNaN(date.getTime())) return String(value)
+    return date.toLocaleDateString("es-VE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    })
+  } catch {
+    return String(value)
+  }
+}
+
+const formatNumber = (value: any, decimals: number = 0): string => {
+  if (value === null || value === undefined) return "-"
+  const num = typeof value === "number" ? value : parseFloat(String(value))
+  if (isNaN(num)) return String(value)
+  return num.toLocaleString("es-VE", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  })
+}
+
+const formatCurrency = (value: any, denominacion?: string): string => {
+  if (value === null || value === undefined) return "-"
+  const num = typeof value === "number" ? value : parseFloat(String(value))
+  if (isNaN(num)) return String(value)
+  
+  // Limitar a 2 decimales máximo, eliminar ceros innecesarios
+  const formatted = num.toLocaleString("es-VE", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  })
+  
+  // Determinar símbolo de moneda basado en denominación
+  let currencySymbol = ""
+  if (denominacion) {
+    const denomUpper = denominacion.toUpperCase()
+    if (denomUpper === "VEN" || denomUpper === "BS" || denomUpper === "BOLIVARES") {
+      currencySymbol = "Bs."
+    } else if (denomUpper === "USD" || denomUpper === "DOLARES") {
+      currencySymbol = "$"
+    } else if (denomUpper === "EUR" || denomUpper === "EUROS") {
+      currencySymbol = "€"
+    } else {
+      currencySymbol = denominacion
+    }
+  }
+  
+  return currencySymbol ? `${currencySymbol} ${formatted}` : formatted
+}
+
+const formatCellValue = (key: string, value: any, row: any): string => {
+  // Si es el campo denominacion, mostrarlo como "Bs." siempre (porque todos los montos están en Bs)
+  if (key.toLowerCase() === "denominacion") {
+    return "Bs."  // Todos los reportes ahora convierten a Bs
+  }
+  
+  // Detectar campos de fecha
+  if (key.toLowerCase().includes("fecha") || 
+      key.toLowerCase().includes("date") ||
+      key.toLowerCase().includes("reserva")) {
+    return formatDate(value)
+  }
+  
+  // Detectar campos de moneda/monto (pero no cantidad_vendida, veces_vendido, etc.)
+  const isCurrencyField = (key.toLowerCase().includes("monto") ||
+      key.toLowerCase().includes("ingresos") ||
+      key.toLowerCase().includes("gastado") ||
+      (key.toLowerCase().includes("total") && !key.toLowerCase().includes("reservas")) ||
+      key.toLowerCase().includes("promedio") ||
+      key.toLowerCase().includes("precio")) &&
+      !key.toLowerCase().includes("cantidad") &&
+      !key.toLowerCase().includes("veces")
+  
+  if (isCurrencyField) {
+    // Todos los montos están en Bs ahora, así que siempre mostrar "Bs."
+    return formatCurrency(value, "VEN")
+  }
+  
+  // Detectar campos numéricos (cantidades, IDs, etc.)
+  if (typeof value === "number" || (!isNaN(parseFloat(String(value))) && String(value).trim() !== "")) {
+    // Si es un número entero, no mostrar decimales
+    const num = typeof value === "number" ? value : parseFloat(String(value))
+    if (Number.isInteger(num)) {
+      return formatNumber(value, 0)
+    }
+    // Si tiene decimales, mostrar máximo 2
+    return formatNumber(value, 2)
+  }
+  
+  // Valores por defecto
+  if (value === null || value === undefined) return "-"
+  if (typeof value === "object") return JSON.stringify(value)
+  return String(value)
+}
+
 export function ReportsAnalytics() {
   const [activeTab, setActiveTab] = useState("catalog")
   const [showBuilder, setShowBuilder] = useState(false)
@@ -72,9 +172,9 @@ export function ReportsAnalytics() {
     },
     {
       id: 2,
-      name: "Reporte de Ventas por Período",
+      name: "Órdenes por Período",
       category: "Ventas",
-      description: "Análisis completo de ventas en un período determinado",
+      description: "Análisis completo de órdenes en un período determinado",
       spName: "rep_ventas_periodo",
       icon: DollarSign,
       parametros: {
@@ -110,14 +210,15 @@ export function ReportsAnalytics() {
     },
     {
       id: 5,
-      name: "Ingresos por Método de Pago",
-      category: "Finanzas",
-      description: "Distribución de ingresos según método de pago utilizado",
-      spName: "rep_ingresos_metodos_pago",
-      icon: DollarSign,
+      name: "Proveedores Más Vendidos",
+      category: "Proveedores",
+      description: "Ranking de proveedores con más servicios vendidos e ingresos generados",
+      spName: "rep_proveedores_mas_vendidos",
+      icon: BarChart3,
       parametros: {
         fechaInicio: true,
         fechaFin: true,
+        limit: true,
       },
     },
   ]
@@ -196,7 +297,8 @@ export function ReportsAnalytics() {
           ...reporteData.datos.map((row: any) =>
             headers.map(header => {
               const value = row[header]
-              return typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value
+              const formatted = formatCellValue(header, value, row)
+              return typeof formatted === "string" ? `"${formatted.replace(/"/g, '""')}"` : formatted
             }).join(",")
           ),
         ]
@@ -229,26 +331,32 @@ export function ReportsAnalytics() {
         
         doc.setFontSize(10)
         doc.setTextColor(100, 100, 100)
-        doc.text(`Generado el: ${new Date().toLocaleString("es-VE")}`, 14, 28)
-        doc.text(`Total de registros: ${reporteData.totalRegistros}`, 14, 34)
+        const fechaGen = new Date(reporteData.fechaGeneracion).toLocaleString("es-VE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        })
+        doc.text(`Generado el: ${fechaGen}`, 14, 28)
+        doc.text(`Total de registros: ${formatNumber(reporteData.totalRegistros)}`, 14, 34)
         
         // Parámetros si existen
-        if (reporteData.parametros && (reporteData.parametros.fechaInicio || reporteData.parametros.fechaFin)) {
+        if (reporteData.parametros && (reporteData.parametros.fechaInicio || reporteData.parametros.fechaFin || reporteData.parametros.limit)) {
           let paramsText = "Parámetros: "
-          if (reporteData.parametros.fechaInicio) paramsText += `Desde ${reporteData.parametros.fechaInicio} `
-          if (reporteData.parametros.fechaFin) paramsText += `Hasta ${reporteData.parametros.fechaFin}`
+          if (reporteData.parametros.fechaInicio) paramsText += `Desde ${formatDate(reporteData.parametros.fechaInicio)} `
+          if (reporteData.parametros.fechaFin) paramsText += `Hasta ${formatDate(reporteData.parametros.fechaFin)} `
+          if (reporteData.parametros.limit) paramsText += `Límite: ${reporteData.parametros.limit}`
           doc.text(paramsText, 14, 40)
         }
 
-        // Preparar datos para la tabla
+        // Preparar datos para la tabla con formato
         const headers = Object.keys(reporteData.datos[0]).map(h => 
           h.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
         )
         const rows = reporteData.datos.map((row: any) => 
-          Object.values(row).map(val => {
-            if (val === null || val === undefined) return ""
-            if (typeof val === "object") return JSON.stringify(val)
-            return String(val)
+          Object.entries(row).map(([key, val]) => {
+            return formatCellValue(key, val, row)
           })
         )
 
@@ -758,14 +866,21 @@ export function ReportsAnalytics() {
                     <div>
                       <p className="text-sm text-muted-foreground">Fecha Generación</p>
                       <p className="text-sm font-medium">
-                        {new Date(reporteData.fechaGeneracion).toLocaleString("es-VE")}
+                        {new Date(reporteData.fechaGeneracion).toLocaleString("es-VE", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        })}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Parámetros</p>
                       <p className="text-xs">
-                        {reporteData.parametros.fechaInicio && `Desde: ${reporteData.parametros.fechaInicio}`}
-                        {reporteData.parametros.fechaFin && ` Hasta: ${reporteData.parametros.fechaFin}`}
+                        {reporteData.parametros.fechaInicio && `Desde: ${formatDate(reporteData.parametros.fechaInicio)}`}
+                        {reporteData.parametros.fechaFin && ` Hasta: ${formatDate(reporteData.parametros.fechaFin)}`}
+                        {reporteData.parametros.limit && ` Límite: ${reporteData.parametros.limit}`}
                       </p>
                     </div>
                   </div>
@@ -776,19 +891,57 @@ export function ReportsAnalytics() {
                       <table className="w-full text-sm">
                         <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0">
                           <tr>
-                            {Object.keys(reporteData.datos[0]).map((key) => (
-                              <th key={key} className="px-4 py-2 text-left font-semibold text-xs uppercase">
-                                {key.replace(/_/g, " ")}
-                              </th>
-                            ))}
+                            {Object.keys(reporteData.datos[0]).map((key) => {
+                              // Traducir nombres de columnas comunes
+                              const columnNames: Record<string, string> = {
+                                id_venta: "ID Orden",
+                                fecha_venta: "Fecha Orden",
+                                cliente_nombre: "Cliente",
+                                cliente_ci: "Cédula",
+                                monto_total: "Monto Total",
+                                cantidad_items: "Items",
+                                estado: "Estado",
+                                denominacion: "Moneda",
+                                id_cliente: "ID Cliente",
+                                nombre_completo: "Nombre Completo",
+                                ci: "Cédula",
+                                total_reservas: "Total Reservas",
+                                monto_total_gastado: "Monto Total Gastado",
+                                ultima_reserva: "Última Reserva",
+                                primera_reserva: "Primera Reserva",
+                                nombre_destino: "Destino",
+                                cantidad_vendida: "Cantidad Vendida",
+                                ingresos_en_bs: "Ingresos",
+                                id_servicio: "ID Servicio",
+                                nombre_servicio: "Servicio",
+                                tipo_servicio: "Tipo",
+                                nombre_proveedor: "Proveedor",
+                                lugar_destino: "Destino",
+                                veces_vendido: "Veces Vendido",
+                                ingresos_totales: "Ingresos Totales",
+                                precio_promedio: "Precio Promedio",
+                                id_proveedor: "ID Proveedor",
+                                tipo_proveedor: "Tipo Proveedor",
+                                cantidad_servicios_vendidos: "Servicios Vendidos",
+                                promedio_por_servicio: "Promedio por Servicio",
+                              }
+                              
+                              const displayName = columnNames[key] || key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+                              
+                              return (
+                                <th key={key} className="px-4 py-2 text-left font-semibold text-xs uppercase">
+                                  {displayName}
+                                </th>
+                              )
+                            })}
                           </tr>
                         </thead>
                         <tbody>
                           {reporteData.datos.map((row: any, idx: number) => (
                             <tr key={idx} className="border-t hover:bg-slate-50 dark:hover:bg-slate-900">
-                              {Object.values(row).map((value: any, colIdx: number) => (
+                              {Object.entries(row).map(([key, value]: [string, any], colIdx: number) => (
                                 <td key={colIdx} className="px-4 py-2 text-xs">
-                                  {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                                  {formatCellValue(key, value, row)}
                                 </td>
                               ))}
                             </tr>
