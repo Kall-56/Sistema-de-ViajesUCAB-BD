@@ -12,17 +12,16 @@ export async function POST(req: Request) {
   const clienteId = auth.session.clienteId!;
 
   const body = await req.json();
-  const { id_venta, id_servicio, fecha_inicio, fecha_fin } = body as {
+  const { id_venta, id_servicio, fecha_inicio } = body as {
     id_venta: number;
     id_servicio: number;
     fecha_inicio: string;
-    fecha_fin: string;
     // Ignoramos costo_especial si viene en el body - los clientes NO pueden establecerlo
   };
 
-  if (!Number.isInteger(id_venta) || !Number.isInteger(id_servicio) || !fecha_inicio || !fecha_fin) {
+  if (!Number.isInteger(id_venta) || !Number.isInteger(id_servicio) || !fecha_inicio) {
     return NextResponse.json(
-      { error: "id_venta, id_servicio, fecha_inicio y fecha_fin son requeridos" },
+      { error: "id_venta, id_servicio y fecha_inicio son requeridos" },
       { status: 400 }
     );
   }
@@ -44,14 +43,13 @@ export async function POST(req: Request) {
 
     // Usar función almacenada agregar_item_itinerario
     // IMPORTANTE: Los clientes NO pueden establecer costo_especial (solo admin/proveedor)
-    // Por seguridad, siempre enviamos null para clientes
+    // La función ahora solo acepta: i_id_venta, i_id_servicio, i_fecha_inicio (date)
     const { rows } = await pool.query(
-      `SELECT agregar_item_itinerario($1, $2, $3::date, $4::date, NULL::numeric) AS id_itinerario`,
+      `SELECT agregar_item_itinerario($1, $2, $3::date) AS id_itinerario`,
       [
         id_venta,
         id_servicio,
         fecha_inicio,
-        fecha_fin,
       ]
     );
 

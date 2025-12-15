@@ -23,6 +23,7 @@ export async function GET() {
           JOIN estado e ON e.id = ve.fk_estado
           WHERE ve.fk_venta = v.id_venta
             AND e.nombre = 'pendiente'
+            AND ve.fecha_fin IS NULL
         )
         AND EXISTS (
           SELECT 1 FROM itinerario i WHERE i.fk_venta = v.id_venta

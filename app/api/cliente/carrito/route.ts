@@ -21,7 +21,6 @@ export async function GET() {
         v.monto_compensacion,
         (SELECT COUNT(*) FROM itinerario i WHERE i.fk_venta = v.id_venta) AS cantidad_items,
         (SELECT MIN(i.fecha_hora_inicio) FROM itinerario i WHERE i.fk_venta = v.id_venta) AS fecha_inicio_minima,
-        (SELECT MAX(i.fecha_hora_fin) FROM itinerario i WHERE i.fk_venta = v.id_venta) AS fecha_fin_maxima,
         (SELECT array_agg(
           json_build_object(
             'id_itinerario', i.id,
@@ -30,7 +29,6 @@ export async function GET() {
             'descripcion_servicio', s.descripcion,
             'costo_unitario_usd', COALESCE(i.costo_especial, s.costo_servicio),
             'fecha_inicio', i.fecha_hora_inicio,
-            'fecha_fin', i.fecha_hora_fin,
             'tipo_servicio', s.tipo_servicio,
             'denominacion', s.denominacion,
             'lugar_nombre', l.nombre
@@ -47,6 +45,7 @@ export async function GET() {
           JOIN estado e ON e.id = ve.fk_estado
           WHERE ve.fk_venta = v.id_venta
             AND e.nombre = 'pendiente'
+            AND ve.fecha_fin IS NULL
         )
         AND EXISTS (
           SELECT 1 FROM itinerario i WHERE i.fk_venta = v.id_venta

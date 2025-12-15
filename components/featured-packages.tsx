@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -84,6 +85,7 @@ const featuredPackages = [
 ]
 
 export function FeaturedPackages() {
+  const router = useRouter()
   const [packages, setPackages] = useState<PaqueteDisplay[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -216,7 +218,14 @@ export function FeaturedPackages() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button className="flex-1 bg-[#E91E63] hover:bg-[#E91E63]/90">
+                  <Button 
+                    className="flex-1 bg-[#E91E63] hover:bg-[#E91E63]/90"
+                    onClick={() => {
+                      // Extraer el ID del paquete del formato "paquete-{id}"
+                      const paqueteId = pkg.id.replace("paquete-", "")
+                      router.push(`/paquetes/${paqueteId}`)
+                    }}
+                  >
                     Ver Detalles
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>

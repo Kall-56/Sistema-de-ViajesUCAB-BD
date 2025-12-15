@@ -96,37 +96,32 @@ export async function GET(
       });
     }
 
-    // Agregar fechaInicio si existe
-    if (fechaInicio) {
-      paramsArray.push(fechaInicio);
-      paramPlaceholders.push(`$${paramIndex}`);
-      paramIndex++;
-    } else {
-      paramPlaceholders.push("NULL");
-    }
+    // Agregar fechaInicio (siempre se pasa, puede ser NULL)
+    paramsArray.push(fechaInicio || null);
+    paramPlaceholders.push(`$${paramIndex}::date`);
+    paramIndex++;
 
-    // Agregar fechaFin si existe
-    if (fechaFin) {
-      paramsArray.push(fechaFin);
-      paramPlaceholders.push(`$${paramIndex}`);
-      paramIndex++;
-    } else {
-      paramPlaceholders.push("NULL");
-    }
+    // Agregar fechaFin (siempre se pasa, puede ser NULL)
+    paramsArray.push(fechaFin || null);
+    paramPlaceholders.push(`$${paramIndex}::date`);
+    paramIndex++;
 
     // Agregar limit solo si el SP lo acepta
     if (spsConLimite.includes(nombreReporte)) {
-      if (limit) {
-        paramsArray.push(parseInt(limit, 10));
-        paramPlaceholders.push(`$${paramIndex}`);
-        paramIndex++;
-      } else {
-        paramPlaceholders.push("NULL");
-      }
+      paramsArray.push(limit ? parseInt(limit, 10) : null);
+      paramPlaceholders.push(`$${paramIndex}::integer`);
+      paramIndex++;
     }
 
     // Construir la llamada al stored procedure
     const query = `SELECT * FROM ${nombreReporte}(${paramPlaceholders.join(", ")})`;
+
+    // Log para debugging (solo en desarrollo)
+    if (process.env.NODE_ENV === "development") {
+      console.log(`Ejecutando reporte: ${nombreReporte}`);
+      console.log(`Query: ${query}`);
+      console.log(`Parámetros:`, paramsArray);
+    }
 
     // Ejecutar el stored procedure
     const result = await pool.query(query, paramsArray);
@@ -146,13 +141,16 @@ export async function GET(
   } catch (error: any) {
     console.error(`Error ejecutando reporte ${params.nombre}:`, error);
     console.error("Error completo:", error);
+    console.error("Query ejecutada:", `SELECT * FROM ${params.nombre}(${paramPlaceholders?.join(", ") || "N/A"})`);
+    console.error("Parámetros enviados:", paramsArray);
     
     // Errores específicos de PostgreSQL
     if (error.code === '42883') { // undefined_function
       return NextResponse.json(
         { 
           error: `El reporte "${params.nombre}" no existe.`,
-          hint: "Verifique que el stored procedure esté creado en la base de datos. Ejecute el script: scripts/stored-procedures-reportes.sql"
+          hint: "Verifique que el stored procedure esté creado en la base de datos.",
+          detalles: process.env.NODE_ENV === "development" ? error.message : undefined
         },
         { status: 404 }
       );
@@ -162,17 +160,20 @@ export async function GET(
       return NextResponse.json(
         { 
           error: `Error en la estructura del reporte "${params.nombre}".`,
-          hint: "Verifique que los parámetros sean correctos o que el stored procedure esté actualizado."
+          hint: "Verifique que los parámetros sean correctos o que el stored procedure esté actualizado.",
+          detalles: process.env.NODE_ENV === "development" ? error.message : undefined,
+          query: process.env.NODE_ENV === "development" ? `SELECT * FROM ${params.nombre}(...)` : undefined
         },
         { status: 400 }
       );
     }
 
-    if (error.message?.includes("does not exist") || error.message?.includes("no existe")) {
+    if (error.code === '42P01' || error.message?.includes("does not exist") || error.message?.includes("no existe")) {
       return NextResponse.json(
         { 
           error: `El reporte "${params.nombre}" no existe.`,
-          hint: "Verifique que el stored procedure esté creado en la base de datos."
+          hint: "Verifique que el stored procedure esté creado en la base de datos.",
+          detalles: process.env.NODE_ENV === "development" ? error.message : undefined
         },
         { status: 404 }
       );
@@ -182,7 +183,8 @@ export async function GET(
       { 
         error: error.message || "Error ejecutando el reporte",
         detalles: process.env.NODE_ENV === "development" ? error.stack : undefined,
-        codigoError: error.code
+        codigoError: error.code,
+        hint: "Revise la consola del servidor para más detalles."
       },
       { status: 500 }
     );

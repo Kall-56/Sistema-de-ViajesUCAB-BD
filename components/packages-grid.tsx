@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -127,6 +128,7 @@ const allPackages = [
 ]
 
 export function PackagesGrid() {
+  const router = useRouter()
   const [showFilters, setShowFilters] = useState(false)
   const [selectedDestination, setSelectedDestination] = useState<string>("all")
   const [selectedType, setSelectedType] = useState<string>("all")
@@ -350,7 +352,15 @@ export function PackagesGrid() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button className="flex-1 bg-[#E91E63] hover:bg-[#E91E63]/90" size="sm">
+                  <Button 
+                    className="flex-1 bg-[#E91E63] hover:bg-[#E91E63]/90" 
+                    size="sm"
+                    onClick={() => {
+                      // Extraer el ID del paquete del formato "paquete-{id}"
+                      const paqueteId = pkg.id.replace("paquete-", "")
+                      router.push(`/paquetes/${paqueteId}`)
+                    }}
+                  >
                     Ver Detalles
                   </Button>
                   <Button variant="outline" size="sm">

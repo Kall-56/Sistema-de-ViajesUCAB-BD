@@ -31,6 +31,7 @@ import {
   Upload,
   X,
   Image as ImageIcon,
+  Package,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -110,7 +111,7 @@ function parseLinks(text: string): string[] {
 export function ProviderDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<
-    "overview" | "services" | "availability" | "pricing"
+    "overview" | "services" | "availability" | "pricing" | "packages"
   >("services");
 
   // Header (nombre proveedor y usuario)
@@ -627,6 +628,14 @@ export function ProviderDashboard() {
                     <DollarSign className="h-4 w-4" />
                     Tarifas
                   </Button>
+                  <Button
+                    variant={activeTab === "packages" ? "secondary" : "ghost"}
+                    className="w-full justify-start gap-3"
+                    onClick={() => setActiveTab("packages")}
+                  >
+                    <Building2 className="h-4 w-4" />
+                    Paquetes con Mis Servicios
+                  </Button>
                 </nav>
               </CardContent>
             </Card>
@@ -871,6 +880,9 @@ export function ProviderDashboard() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Packages */}
+            {activeTab === "packages" && <ProviderPackagesView />}
           </div>
         </div>
       </div>
@@ -1567,5 +1579,139 @@ export function ProviderDashboard() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Componente para mostrar paquetes que incluyen servicios del proveedor
+function ProviderPackagesView() {
+  const [loading, setLoading] = useState(false);
+  const [paquetes, setPaquetes] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchPaquetes() {
+      setLoading(true);
+      setError(null);
+      try {
+        const r = await fetch("/api/proveedor/paquetes", { cache: "no-store" });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data?.error ?? "Error cargando paquetes");
+        setPaquetes(Array.isArray(data?.paquetes) ? data.paquetes : []);
+      } catch (err: any) {
+        setError(err?.message ?? "Error");
+        setPaquetes([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchPaquetes();
+  }, []);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+            <span className="ml-2 text-muted-foreground">Cargando paquetes...</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-2 text-destructive">
+            <AlertCircle className="h-5 w-5" />
+            <p>{error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Package className="h-5 w-5 text-blue-600" />
+          Paquetes que Incluyen Mis Servicios
+        </CardTitle>
+        <CardDescription>
+          Estos son los paquetes turísticos que incluyen al menos uno de tus servicios.
+          Los clientes pueden comprar estos paquetes completos.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {paquetes.length === 0 ? (
+          <div className="text-center py-8">
+            <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">
+              No hay paquetes que incluyan tus servicios en este momento.
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Los administradores pueden crear paquetes que incluyan tus servicios.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {paquetes.map((paquete) => (
+              <Card key={paquete.id_paquete} className="border-2">
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold text-lg">{paquete.nombre_paquete}</h3>
+                          <Badge variant="outline">{paquete.tipo_paquete}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {paquete.descripcion_paquete}
+                        </p>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span>
+                            <strong>{paquete.total_servicios_paquete}</strong> servicios en total
+                          </span>
+                          <span>
+                            <strong>{paquete.ids_servicios_proveedor?.length || 0}</strong> de tus servicios incluidos
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {paquete.nombres_servicios_proveedor && paquete.nombres_servicios_proveedor.length > 0 && (
+                      <div>
+                        <h4 className="font-medium text-sm mb-2">Tus servicios en este paquete:</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {paquete.nombres_servicios_proveedor.map((nombre: string, idx: number) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {nombre}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {paquete.restricciones && paquete.restricciones.length > 0 && (
+                      <div>
+                        <h4 className="font-medium text-sm mb-2">Restricciones:</h4>
+                        <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+                          {paquete.restricciones.map((restriccion: string, idx: number) => (
+                            <li key={idx}>{restriccion}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

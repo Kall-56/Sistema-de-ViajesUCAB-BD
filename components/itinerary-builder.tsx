@@ -51,7 +51,6 @@ type ItineraryItem = {
   nombre_servicio: string;
   costo_unitario_usd: number;
   fecha_inicio: string;
-  fecha_fin: string;
   tipo_servicio: string;
 };
 
@@ -78,7 +77,6 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
   // Formulario para agregar servicio
   const [selectedServicioId, setSelectedServicioId] = useState<string>("")
   const [fechaInicio, setFechaInicio] = useState("")
-  const [fechaFin, setFechaFin] = useState("")
 
   // Cargar venta específica o crear nueva
   useEffect(() => {
@@ -168,12 +166,12 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
   }
 
   async function agregarServicio() {
-    if (!venta || !selectedServicioId || !fechaInicio || !fechaFin) {
+    if (!venta || !selectedServicioId || !fechaInicio) {
       setError("Completa todos los campos requeridos")
       return
     }
 
-    // Validar que las fechas no sean pasadas
+    // Validar que la fecha no sea pasada
     const hoy = new Date()
     hoy.setHours(0, 0, 0, 0)
     const fechaInicioDate = new Date(fechaInicio)
@@ -181,11 +179,6 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
     
     if (fechaInicioDate < hoy) {
       setError("La fecha de inicio no puede ser anterior a hoy")
-      return
-    }
-
-    if (fechaFin < fechaInicio) {
-      setError("La fecha de fin debe ser posterior a la fecha de inicio")
       return
     }
 
@@ -200,9 +193,6 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
           id_venta: venta.id_venta,
           id_servicio: Number(selectedServicioId),
           fecha_inicio: fechaInicio,
-          fecha_fin: fechaFin,
-          // costo_especial solo puede ser establecido por admin/proveedor, nunca por cliente
-          costo_especial: null,
         }),
       })
 
@@ -216,7 +206,6 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
       setShowAddDialog(false)
       setSelectedServicioId("")
       setFechaInicio("")
-      setFechaFin("")
       await loadItinerario(venta.id_venta)
     } catch (err: any) {
       toast.error("Error", {
@@ -325,20 +314,13 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
       })
 
       // Preparar datos de la tabla
-      const headers = [["#", "Tipo", "Servicio", "Fecha Inicio", "Fecha Fin", "Costo (USD)"]]
+      const headers = [["#", "Tipo", "Servicio", "Fecha Inicio", "Costo (USD)"]]
       const rows = itemsOrdenados.map((item, index) => [
         String(index + 1),
         getTypeLabel(item.tipo_servicio),
         item.nombre_servicio || "Sin nombre",
         item.fecha_inicio 
           ? new Date(item.fecha_inicio).toLocaleDateString("es-ES", {
-              day: "numeric",
-              month: "short",
-              year: "numeric"
-            })
-          : "N/A",
-        item.fecha_fin
-          ? new Date(item.fecha_fin).toLocaleDateString("es-ES", {
               day: "numeric",
               month: "short",
               year: "numeric"
@@ -556,12 +538,6 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
                                           month: "short",
                                           year: "numeric",
                                         })}
-                                        {item.fecha_fin &&
-                                          ` - ${new Date(item.fecha_fin).toLocaleDateString("es-ES", {
-                                            day: "numeric",
-                                            month: "short",
-                                            year: "numeric",
-                                          })}`}
                                       </p>
                                     )}
                                   </div>
@@ -790,26 +766,8 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
                 <Input
                   type="date"
                   value={fechaInicio}
-                  onChange={(e) => {
-                    setFechaInicio(e.target.value)
-                    // Si la fecha fin es anterior a la nueva fecha inicio, actualizarla
-                    if (e.target.value && fechaFin && e.target.value > fechaFin) {
-                      setFechaFin("")
-                    }
-                  }}
+                  onChange={(e) => setFechaInicio(e.target.value)}
                   min={new Date().toISOString().split("T")[0]}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>
-                  Fecha de fin <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  type="date"
-                  value={fechaFin}
-                  onChange={(e) => setFechaFin(e.target.value)}
-                  min={fechaInicio || new Date().toISOString().split("T")[0]}
-                  disabled={!fechaInicio}
                 />
               </div>
             </div>
@@ -819,7 +777,7 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
             <Button
               className="flex-1 bg-[#E91E63] hover:bg-[#E91E63]/90"
               onClick={agregarServicio}
-              disabled={addingItem || !selectedServicioId || !fechaInicio || !fechaFin}
+              disabled={addingItem || !selectedServicioId || !fechaInicio}
             >
               {addingItem ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -834,7 +792,6 @@ export function ItineraryBuilder({ ventaId }: { ventaId?: number }) {
                 setShowAddDialog(false)
                 setSelectedServicioId("")
                 setFechaInicio("")
-                setFechaFin("")
               }}
               disabled={addingItem}
             >

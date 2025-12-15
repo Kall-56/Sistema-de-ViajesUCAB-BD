@@ -39,7 +39,6 @@ type Venta = {
   monto_compensacion: number
   cantidad_items: number
   fecha_inicio_minima: string | null
-  fecha_fin_maxima: string | null
   items: any[] | null
 }
 
@@ -226,20 +225,13 @@ export function ItinerariesList() {
       })
 
       // Preparar datos de la tabla
-      const headers = [["#", "Tipo", "Servicio", "Fecha Inicio", "Fecha Fin", "Costo (USD)"]]
+      const headers = [["#", "Tipo", "Servicio", "Fecha Inicio", "Costo (USD)"]]
       const rows = itemsOrdenados.map((item: any, index: number) => [
         String(index + 1),
         getTypeLabel(item.tipo_servicio),
         item.nombre_servicio || "Sin nombre",
         item.fecha_inicio 
           ? new Date(item.fecha_inicio).toLocaleDateString("es-ES", {
-              day: "numeric",
-              month: "short",
-              year: "numeric"
-            })
-          : "N/A",
-        item.fecha_fin
-          ? new Date(item.fecha_fin).toLocaleDateString("es-ES", {
               day: "numeric",
               month: "short",
               year: "numeric"
@@ -418,12 +410,6 @@ export function ItinerariesList() {
                             month: "short",
                             year: "numeric",
                           })}
-                          {venta.fecha_fin_maxima &&
-                            ` - ${new Date(venta.fecha_fin_maxima).toLocaleDateString("es-ES", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })}`}
                         </span>
                       </div>
                     )}

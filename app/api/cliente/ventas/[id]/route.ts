@@ -34,9 +34,23 @@ export async function GET(
       return NextResponse.json({ error: "No autorizado" }, { status: 403 });
     }
 
-    // Obtener itinerario usando función almacenada
+    // Obtener itinerario con todos los campos necesarios
+    // La función obtener_itinerario_venta solo retorna algunos campos,
+    // así que hacemos la consulta directa para obtener todos los necesarios
     const { rows } = await pool.query(
-      `SELECT * FROM obtener_itinerario_venta($1)`,
+      `
+      SELECT
+        i.id AS id_itinerario,
+        i.fk_servicio AS id_servicio,
+        s.nombre AS nombre_servicio,
+        COALESCE(i.costo_especial, s.costo_servicio) AS costo_unitario_usd,
+        i.fecha_hora_inicio AS fecha_inicio,
+        s.tipo_servicio
+      FROM itinerario i
+      JOIN servicio s ON s.id = i.fk_servicio
+      WHERE i.fk_venta = $1
+      ORDER BY i.fecha_hora_inicio ASC
+      `,
       [idVenta]
     );
 
@@ -84,7 +98,8 @@ export async function DELETE(
       JOIN ven_est ve ON ve.fk_venta = v.id_venta
       JOIN estado e ON e.id = ve.fk_estado
       WHERE v.id_venta = $1
-      ORDER BY ve.fk_venta DESC
+        AND ve.fecha_fin IS NULL
+      ORDER BY ve.fecha_inicio DESC
       LIMIT 1
       `,
       [idVenta]

@@ -39,7 +39,6 @@ type ItinerarioItem = {
   descripcion_servicio?: string
   costo_unitario_usd: number
   fecha_inicio: string
-  fecha_fin: string
   tipo_servicio: string
   denominacion: string
   lugar_nombre?: string
@@ -51,7 +50,6 @@ type VentaCarrito = {
   monto_compensacion: number
   cantidad_items: number
   fecha_inicio_minima: string | null
-  fecha_fin_maxima: string | null
   items: ItinerarioItem[] | null
 }
 
@@ -68,6 +66,17 @@ export function CartCheckout() {
 
   useEffect(() => {
     loadCart()
+    
+    // Escuchar eventos de actualización del carrito
+    const handleCartUpdate = () => {
+      loadCart()
+    }
+    
+    window.addEventListener("cart-updated", handleCartUpdate)
+    
+    return () => {
+      window.removeEventListener("cart-updated", handleCartUpdate)
+    }
   }, [])
 
   async function loadCart() {
@@ -223,12 +232,6 @@ export function CartCheckout() {
                                 month: "long",
                                 year: "numeric",
                               })}
-                              {venta.fecha_fin_maxima &&
-                                ` - ${new Date(venta.fecha_fin_maxima).toLocaleDateString("es-ES", {
-                                  day: "numeric",
-                                  month: "long",
-                                  year: "numeric",
-                                })}`}
                             </p>
                           )}
                         </div>
