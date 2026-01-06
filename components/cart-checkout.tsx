@@ -30,7 +30,6 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Link from "next/link"
 
 type ItinerarioItem = {
@@ -83,6 +82,19 @@ export function CartCheckout() {
   const [installments, setInstallments] = useState("1")
   const [useMiles, setUseMiles] = useState(false)
   const [milesAmount, setMilesAmount] = useState("0")
+  const [processing, setProcessing] = useState(false)
+  
+  // Estados para datos de pago
+  const [cardNumber, setCardNumber] = useState("")
+  const [cardExpiry, setCardExpiry] = useState("")
+  const [cardCVV, setCardCVV] = useState("")
+  const [cardHolder, setCardHolder] = useState("")
+  const [transferReference, setTransferReference] = useState("")
+  const [transferAmount, setTransferAmount] = useState("")
+  const [transferDate, setTransferDate] = useState("")
+  const [officePaymentType, setOfficePaymentType] = useState("efectivo")
+  const [officeNote, setOfficeNote] = useState("")
+  const [acceptTerms, setAcceptTerms] = useState(false)
 
   useEffect(() => {
     loadCart()
@@ -164,6 +176,180 @@ export function CartCheckout() {
       })
     } finally {
       setRemoving(null)
+    }
+  }
+
+  async function handleCheckout() {
+    // Validaciones pre-checkout
+    if (ventas.length === 0) {
+      toast.error("Carrito vacío", {
+        description: "Agrega al menos un itinerario al carrito",
+      })
+      return
+    }
+
+    // Validar que no haya servicios no disponibles
+    const hayServiciosNoDisponibles = ventas.some((v) =>
+      v.items?.some((item) => !item.servicio_activo)
+    )
+
+    if (hayServiciosNoDisponibles) {
+      toast.error("Carrito inválido", {
+        description: "Hay servicios no disponibles en tu carrito. Elimínalos para continuar.",
+      })
+      return
+    }
+
+    if (!acceptTerms) {
+      toast.error("Términos y condiciones", {
+        description: "Debes aceptar los términos y condiciones para continuar",
+      })
+      return
+    }
+
+    // Validar datos según método de pago
+    if (paymentMethod === "credit-card") {
+      if (!cardNumber || !cardHolder || !cardExpiry) {
+        toast.error("Datos incompletos", {
+          description: "Completa todos los datos de la tarjeta",
+        })
+        return
+      }
+    } else if (paymentMethod === "zelle" || paymentMethod === "bank-transfer") {
+      if (!transferReference) {
+        toast.error("Datos incompletos", {
+          description: "Ingresa el número de referencia de la transferencia",
+        })
+        return
+      }
+    }
+
+    setProcessing(true)
+
+    try {
+      // Preparar datos de pago según el método
+      const ventasParaCheckout = ventas.map((venta) => {
+        let datosMetodoPago: any = {}
+        let metodoPagoBD = ""
+
+        if (paymentMethod === "credit-card") {
+          metodoPagoBD = "tarjeta"
+          datosMetodoPago = {
+            numero_tarjeta: cardNumber.replace(/\s/g, ""),
+            codigo_seguridad: cardCVV ? Number.parseInt(cardCVV) : null,
+            fecha_vencimiento: cardExpiry ? new Date(cardExpiry) : null,
+            titular: cardHolder,
+            emisor: null, // Se puede agregar un campo para esto
+            fk_banco: null,
+          }
+        } else if (paymentMethod === "zelle" || paymentMethod === "bank-transfer") {
+          metodoPagoBD = "billetera" // Zelle/PayPal se manejan como billetera
+          datosMetodoPago = {
+            numero_confirmacion: transferReference,
+            fk_tbd: null, // Tipo de billetera digital (se puede agregar)
+            fk_banco: null,
+          }
+        } else if (paymentMethod === "crypto") {
+          metodoPagoBD = "cripto"
+          datosMetodoPago = {
+            nombre_criptomoneda: "USDT", // Por defecto, se puede hacer select
+            direccion_billetera: transferReference,
+          }
+        } else if (paymentMethod === "office") {
+          // Pago en oficina: solo registramos intención, no creamos método de pago real
+          // Usaremos "cheque" como placeholder pero con nota
+          metodoPagoBD = "cheque"
+          datosMetodoPago = {
+            codigo_cuenta: null,
+            numero_cheque: null, // Se puede generar un número de referencia
+            fk_banco: null,
+          }
+        }
+
+        return {
+          id_venta: venta.id_venta,
+          metodo_pago: metodoPagoBD,
+          datos_metodo_pago: datosMetodoPago,
+          monto_pago: venta.monto_total, // Monto total de la venta en Bs
+          denominacion: "VEN",
+        }
+      })
+
+      const response = await fetch("/api/cliente/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ventas: ventasParaCheckout }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Error procesando el pago")
+      }
+
+      // Verificar resultados
+      const todasExitosas = data.resultados?.every((r: any) => r.exito) ?? false
+      const algunasExitosas = data.resultados?.some((r: any) => r.exito) ?? false
+
+      if (todasExitosas) {
+        // Todas las ventas fueron pagadas exitosamente
+        const estadosFinales = data.resultados.map((r: any) => r.estado_final)
+        const todasPagadas = estadosFinales.every((e: string) => e === "Pagado")
+
+        if (todasPagadas) {
+          toast.success("¡Pago exitoso!", {
+            description: "Tu compra ha sido confirmada. Redirigiendo a tus viajes...",
+            duration: 3000,
+          })
+
+          // Limpiar carrito
+          window.dispatchEvent(new Event("cart-updated"))
+
+          // Redirigir a mis viajes después de un breve delay
+          setTimeout(() => {
+            router.push("/mis-viajes")
+          }, 2000)
+        } else {
+          // Algunas quedaron pendientes
+          toast.success("Reserva registrada", {
+            description: "Tu reserva ha sido registrada. El pago está pendiente de confirmación.",
+            duration: 5000,
+          })
+
+          setTimeout(() => {
+            router.push("/mis-viajes")
+          }, 2000)
+        }
+      } else if (algunasExitosas) {
+        // Algunas exitosas, algunas fallaron
+        const errores = data.resultados
+          .filter((r: any) => !r.exito)
+          .map((r: any) => r.error)
+          .join(", ")
+
+        toast.warning("Pago parcial", {
+          description: `Algunas ventas se procesaron, pero hubo errores: ${errores}`,
+          duration: 6000,
+        })
+
+        // Recargar carrito para ver qué quedó pendiente
+        await loadCart()
+      } else {
+        // Todas fallaron
+        const errores = data.resultados
+          .map((r: any) => r.error || "Error desconocido")
+          .join(", ")
+
+        throw new Error(`Error procesando pagos: ${errores}`)
+      }
+    } catch (err: any) {
+      console.error("Error en checkout:", err)
+      toast.error("Error procesando pago", {
+        description: err?.message ?? "No se pudo procesar el pago. Intenta nuevamente.",
+        duration: 6000,
+      })
+    } finally {
+      setProcessing(false)
     }
   }
 
@@ -502,6 +688,15 @@ export function CartCheckout() {
                           <p className="text-sm text-muted-foreground">Pago móvil o transferencia</p>
                         </div>
                       </label>
+
+                      <label className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-accent transition-colors">
+                        <RadioGroupItem value="office" />
+                        <Wallet className="h-5 w-5 text-[#E91E63]" />
+                        <div className="flex-1">
+                          <p className="font-medium">Pago en oficina</p>
+                          <p className="text-sm text-muted-foreground">Efectivo, cheque o depósito</p>
+                        </div>
+                      </label>
                     </div>
                   </RadioGroup>
 
@@ -510,19 +705,46 @@ export function CartCheckout() {
                       <div className="grid gap-4 md:grid-cols-2">
                         <div className="md:col-span-2 space-y-2">
                           <Label>Número de tarjeta</Label>
-                          <Input placeholder="1234 5678 9012 3456" />
+                          <Input 
+                            placeholder="1234 5678 9012 3456" 
+                            value={cardNumber}
+                            onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, "").slice(0, 16))}
+                            maxLength={16}
+                          />
                         </div>
                         <div className="space-y-2">
                           <Label>Fecha de vencimiento</Label>
-                          <Input placeholder="MM/AA" />
+                          <Input 
+                            placeholder="MM/AA" 
+                            value={cardExpiry}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, "").slice(0, 4)
+                              if (value.length >= 2) {
+                                setCardExpiry(`${value.slice(0, 2)}/${value.slice(2)}`)
+                              } else {
+                                setCardExpiry(value)
+                              }
+                            }}
+                            maxLength={5}
+                          />
                         </div>
                         <div className="space-y-2">
                           <Label>CVV</Label>
-                          <Input placeholder="123" type="password" maxLength={4} />
+                          <Input 
+                            placeholder="123" 
+                            type="password" 
+                            maxLength={4}
+                            value={cardCVV}
+                            onChange={(e) => setCardCVV(e.target.value.replace(/\D/g, ""))}
+                          />
                         </div>
                         <div className="md:col-span-2 space-y-2">
                           <Label>Nombre en la tarjeta</Label>
-                          <Input placeholder="Como aparece en la tarjeta" />
+                          <Input 
+                            placeholder="Como aparece en la tarjeta" 
+                            value={cardHolder}
+                            onChange={(e) => setCardHolder(e.target.value)}
+                          />
                         </div>
                       </div>
 
@@ -539,6 +761,88 @@ export function CartCheckout() {
                             <SelectItem value="12">12 cuotas (12% interés)</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+                    </div>
+                  )}
+
+                  {(paymentMethod === "zelle" || paymentMethod === "bank-transfer") && (
+                    <div className="space-y-4 pt-4 border-t">
+                      <div className="space-y-2">
+                        <Label>Número de referencia / Confirmación</Label>
+                        <Input 
+                          placeholder="Ingresa el número de referencia de la transferencia" 
+                          value={transferReference}
+                          onChange={(e) => setTransferReference(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {paymentMethod === "zelle" 
+                            ? "Ingresa el número de confirmación de Zelle"
+                            : "Ingresa el número de referencia de la transferencia bancaria o pago móvil"}
+                        </p>
+                      </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Monto transferido</Label>
+                          <Input 
+                            type="number"
+                            placeholder="0.00"
+                            value={transferAmount}
+                            onChange={(e) => setTransferAmount(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Fecha de transferencia</Label>
+                          <Input 
+                            type="date"
+                            value={transferDate}
+                            onChange={(e) => setTransferDate(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {paymentMethod === "crypto" && (
+                    <div className="space-y-4 pt-4 border-t">
+                      <div className="space-y-2">
+                        <Label>Dirección de billetera</Label>
+                        <Input 
+                          placeholder="0x..." 
+                          value={transferReference}
+                          onChange={(e) => setTransferReference(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Ingresa la dirección de tu billetera cripto
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {paymentMethod === "office" && (
+                    <div className="space-y-4 pt-4 border-t">
+                      <div className="space-y-2">
+                        <Label>Tipo de pago en oficina</Label>
+                        <Select value={officePaymentType} onValueChange={setOfficePaymentType}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="efectivo">Efectivo</SelectItem>
+                            <SelectItem value="cheque">Cheque</SelectItem>
+                            <SelectItem value="deposito">Depósito</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Nota adicional (opcional)</Label>
+                        <Input 
+                          placeholder="Información adicional sobre el pago" 
+                          value={officeNote}
+                          onChange={(e) => setOfficeNote(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Esta reserva quedará pendiente hasta que se confirme el pago en oficina
+                        </p>
                       </div>
                     </div>
                   )}
@@ -665,14 +969,20 @@ export function CartCheckout() {
                     {/* Confirm Button */}
                     <Button
                       className="w-full h-12 bg-[#E91E63] hover:bg-[#E91E63]/90 text-lg"
-                      onClick={() => {
-                        toast.info("Próximamente", {
-                          description: "La funcionalidad de pago estará disponible pronto",
-                        })
-                      }}
+                      onClick={handleCheckout}
+                      disabled={processing || ventas.length === 0}
                     >
-                      <CheckCircle2 className="h-5 w-5 mr-2" />
-                      Confirmar y pagar
+                      {processing ? (
+                        <>
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                          Procesando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-5 w-5 mr-2" />
+                          Confirmar y pagar
+                        </>
+                      )}
                     </Button>
 
                     {/* Trust Messages */}
@@ -712,7 +1022,11 @@ export function CartCheckout() {
                       <Input type="tel" placeholder="+58 412 123 4567" />
                     </div>
                     <label className="flex items-start gap-2 cursor-pointer text-sm">
-                      <Checkbox className="mt-0.5" />
+                      <Checkbox 
+                        className="mt-0.5" 
+                        checked={acceptTerms}
+                        onCheckedChange={(checked) => setAcceptTerms(checked as boolean)}
+                      />
                       <span className="text-muted-foreground">
                         Acepto los términos y condiciones y la política de privacidad
                       </span>

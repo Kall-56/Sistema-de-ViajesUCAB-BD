@@ -1,0 +1,16 @@
+import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
+import { MisViajesList } from "@/components/mis-viajes-list"
+
+export default function MisViajesPage() {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1">
+        <MisViajesList />
+      </main>
+      <Footer />
+    </div>
+  )
+}
+

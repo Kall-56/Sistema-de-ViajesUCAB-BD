@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { toast } from "sonner"
 import {
   HeadphonesIcon,
   Search,
@@ -18,7 +20,9 @@ import {
   Star,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 interface Cancellation {
   id: string
@@ -33,29 +37,48 @@ interface Cancellation {
 }
 
 interface Claim {
-  id: string
-  bookingId: string
-  customerName: string
-  type: string
-  description: string
-  status: "open" | "in-progress" | "resolved"
-  createdAt: string
+  id: number
+  id_venta: number
+  nombre_cliente: string
+  c_i: number
+  tipo_reclamo: string
+  id_tipo_reclamo: number
+  comentario: string
+  estado: string
+  id_estado: number
+  fecha_inicio: string
+  fecha_final: string | null
+  nombre_servicio: string
+  fk_itinerario: number
 }
 
 interface Survey {
-  id: string
-  bookingId: string
-  customerName: string
-  service: string
-  rating: number
-  feedback: string
-  date: string
+  id: number
+  id_venta: number
+  nombre_cliente: string
+  c_i: number
+  calificacion_resena: number
+  comentario: string
+  nombre_servicio: string
+  fk_itinerario: number
+}
+
+interface Estado {
+  id: number
+  nombre: string
 }
 
 export function PostsaleManagement() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [activeTab, setActiveTab] = useState("cancellations")
+  const [claims, setClaims] = useState<Claim[]>([])
+  const [surveys, setSurveys] = useState<Survey[]>([])
+  const [estados, setEstados] = useState<Estado[]>([])
+  const [updatingClaim, setUpdatingClaim] = useState<number | null>(null)
 
+  // Cancelaciones hardcodeadas (no hay API aún)
   const cancellations: Cancellation[] = [
     {
       id: "1",
@@ -81,47 +104,162 @@ export function PostsaleManagement() {
     },
   ]
 
-  const claims: Claim[] = [
-    {
-      id: "1",
-      bookingId: "BK-2025-023",
-      customerName: "Carlos Rodríguez",
-      type: "Retraso de vuelo",
-      description: "Vuelo retrasado 4 horas sin compensación",
-      status: "in-progress",
-      createdAt: "2025-02-10 14:30",
-    },
-    {
-      id: "2",
-      bookingId: "BK-2025-012",
-      customerName: "Ana Martínez",
-      type: "Problema con hotel",
-      description: "Habitación no coincide con la reserva",
-      status: "open",
-      createdAt: "2025-02-10 09:15",
-    },
-  ]
+  useEffect(() => {
+    loadData()
+  }, [])
 
-  const surveys: Survey[] = [
-    {
-      id: "1",
-      bookingId: "BK-2025-034",
-      customerName: "Luis Fernández",
-      service: "Paquete Europa 15 días",
-      rating: 5,
-      feedback: "Excelente experiencia, todo perfecto",
-      date: "2025-02-09",
-    },
-    {
-      id: "2",
-      bookingId: "BK-2025-028",
-      customerName: "Sofia Torres",
-      service: "Crucero Mediterráneo",
-      rating: 4,
-      feedback: "Muy bueno, solo mejorar los traslados",
-      date: "2025-02-08",
-    },
-  ]
+  async function loadData() {
+    setLoading(true)
+    try {
+      await Promise.all([loadClaims(), loadSurveys(), loadEstados()])
+    } catch (err) {
+      console.error("Error cargando datos:", err)
+      toast.error("Error", {
+        description: "No se pudieron cargar los datos",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadClaims() {
+    try {
+      const r = await fetch("/api/admin/reclamos", { cache: "no-store" })
+      const data = await r.json()
+      if (r.ok) {
+        setClaims(Array.isArray(data?.reclamos) ? data.reclamos : [])
+      } else {
+        if (r.status === 401 || r.status === 403) {
+          router.push("/login?next=/admin")
+          return
+        }
+        throw new Error(data?.error ?? "Error cargando reclamos")
+      }
+    } catch (err: any) {
+      console.error("Error cargando reclamos:", err)
+      toast.error("Error", {
+        description: err?.message ?? "No se pudieron cargar los reclamos",
+      })
+    }
+  }
+
+  async function loadSurveys() {
+    try {
+      const r = await fetch("/api/admin/resenas", { cache: "no-store" })
+      const data = await r.json()
+      if (r.ok) {
+        setSurveys(Array.isArray(data?.reseñas) ? data.reseñas : [])
+      } else {
+        if (r.status === 401 || r.status === 403) {
+          router.push("/login?next=/admin")
+          return
+        }
+        throw new Error(data?.error ?? "Error cargando reseñas")
+      }
+    } catch (err: any) {
+      console.error("Error cargando reseñas:", err)
+      toast.error("Error", {
+        description: err?.message ?? "No se pudieron cargar las reseñas",
+      })
+    }
+  }
+
+  async function loadEstados() {
+    try {
+      const r = await fetch("/api/admin/estados", { cache: "no-store" })
+      if (r.ok) {
+        const data = await r.json()
+        setEstados(Array.isArray(data?.estados) ? data.estados : [])
+      }
+    } catch (err) {
+      console.error("Error cargando estados:", err)
+      // Si no existe la API, usar estados comunes
+      setEstados([
+        { id: 8, nombre: "En Espera" },
+        { id: 9, nombre: "En Proceso" },
+        { id: 10, nombre: "Resuelto" },
+        { id: 11, nombre: "Cerrado" },
+      ])
+    }
+  }
+
+  async function handleUpdateClaimStatus(claimId: number, newEstadoId: number) {
+    setUpdatingClaim(claimId)
+    try {
+      const r = await fetch(`/api/admin/reclamos/${claimId}/estado`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_estado: newEstadoId }),
+      })
+
+      const data = await r.json()
+      if (!r.ok) {
+        throw new Error(data?.error ?? "Error actualizando estado")
+      }
+
+      toast.success("Estado actualizado", {
+        description: "El estado del reclamo ha sido actualizado exitosamente",
+      })
+
+      await loadClaims()
+    } catch (err: any) {
+      toast.error("Error", {
+        description: err?.message ?? "No se pudo actualizar el estado",
+      })
+    } finally {
+      setUpdatingClaim(null)
+    }
+  }
+
+  function getEstadoBadge(estado: string) {
+    const estadoLower = estado.toLowerCase()
+    if (estadoLower.includes("resuelto") || estadoLower.includes("resuelta")) {
+      return (
+        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+          <CheckCircle2 className="h-3 w-3 mr-1" />
+          Resuelto
+        </Badge>
+      )
+    }
+    if (estadoLower.includes("proceso") || estadoLower.includes("procesando")) {
+      return (
+        <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100">
+          <Clock className="h-3 w-3 mr-1" />
+          En Proceso
+        </Badge>
+      )
+    }
+    return (
+      <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100">
+        <AlertCircle className="h-3 w-3 mr-1" />
+        {estado}
+      </Badge>
+    )
+  }
+
+  const filteredClaims = claims.filter(
+    (claim) =>
+      claim.nombre_cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      claim.comentario.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      claim.id_venta.toString().includes(searchTerm)
+  )
+
+  const filteredSurveys = surveys.filter(
+    (survey) =>
+      survey.nombre_cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      survey.comentario.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      survey.id_venta.toString().includes(searchTerm)
+  )
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-[#E91E63]" />
+        </CardContent>
+      </Card>
+    )
+  }
 
   return (
     <Card>
@@ -167,51 +305,59 @@ export function PostsaleManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {cancellations.map((cancel) => (
-                    <TableRow key={cancel.id}>
-                      <TableCell className="font-medium">{cancel.bookingId}</TableCell>
-                      <TableCell>{cancel.customerName}</TableCell>
-                      <TableCell className="text-sm">{cancel.service}</TableCell>
-                      <TableCell className="font-medium">${cancel.amount}</TableCell>
-                      <TableCell className="text-red-600">${cancel.penalty.toFixed(2)}</TableCell>
-                      <TableCell className="text-green-600 font-medium">${cancel.refund.toFixed(2)}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            cancel.status === "approved"
-                              ? "default"
-                              : cancel.status === "rejected"
-                                ? "destructive"
-                                : "secondary"
-                          }
-                          className={
-                            cancel.status === "approved" ? "bg-green-100 text-green-800 hover:bg-green-100" : ""
-                          }
-                        >
-                          {cancel.status === "pending" && <Clock className="h-3 w-3 mr-1" />}
-                          {cancel.status === "approved" && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                          {cancel.status === "rejected" && <XCircle className="h-3 w-3 mr-1" />}
-                          {cancel.status === "pending"
-                            ? "Pendiente"
-                            : cancel.status === "approved"
-                              ? "Aprobada"
-                              : "Rechazada"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm">
-                            <CheckCircle2 className="h-4 w-4 mr-1" />
-                            Aprobar
-                          </Button>
-                          <Button variant="outline" size="sm" className="text-red-600 bg-transparent">
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Rechazar
-                          </Button>
-                        </div>
+                  {cancellations.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        No hay cancelaciones pendientes
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    cancellations.map((cancel) => (
+                      <TableRow key={cancel.id}>
+                        <TableCell className="font-medium">{cancel.bookingId}</TableCell>
+                        <TableCell>{cancel.customerName}</TableCell>
+                        <TableCell className="text-sm">{cancel.service}</TableCell>
+                        <TableCell className="font-medium">${cancel.amount}</TableCell>
+                        <TableCell className="text-red-600">${cancel.penalty.toFixed(2)}</TableCell>
+                        <TableCell className="text-green-600 font-medium">${cancel.refund.toFixed(2)}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              cancel.status === "approved"
+                                ? "default"
+                                : cancel.status === "rejected"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                            className={
+                              cancel.status === "approved" ? "bg-green-100 text-green-800 hover:bg-green-100" : ""
+                            }
+                          >
+                            {cancel.status === "pending" && <Clock className="h-3 w-3 mr-1" />}
+                            {cancel.status === "approved" && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                            {cancel.status === "rejected" && <XCircle className="h-3 w-3 mr-1" />}
+                            {cancel.status === "pending"
+                              ? "Pendiente"
+                              : cancel.status === "approved"
+                                ? "Aprobada"
+                                : "Rechazada"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm">
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                              Aprobar
+                            </Button>
+                            <Button variant="outline" size="sm" className="text-red-600 bg-transparent">
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Rechazar
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -233,7 +379,7 @@ export function PostsaleManagement() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>ID Reserva</TableHead>
+                    <TableHead>ID Venta</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Descripción</TableHead>
@@ -243,52 +389,63 @@ export function PostsaleManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {claims.map((claim) => (
-                    <TableRow key={claim.id}>
-                      <TableCell className="font-medium">{claim.bookingId}</TableCell>
-                      <TableCell>{claim.customerName}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{claim.type}</Badge>
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate">{claim.description}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            claim.status === "resolved"
-                              ? "default"
-                              : claim.status === "in-progress"
-                                ? "secondary"
-                                : "outline"
-                          }
-                          className={
-                            claim.status === "resolved"
-                              ? "bg-green-100 text-green-800 hover:bg-green-100"
-                              : claim.status === "in-progress"
-                                ? "bg-blue-100 text-blue-800 hover:bg-blue-100"
-                                : ""
-                          }
-                        >
-                          {claim.status === "open" && <AlertCircle className="h-3 w-3 mr-1" />}
-                          {claim.status === "in-progress" && <Clock className="h-3 w-3 mr-1" />}
-                          {claim.status === "resolved" && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                          {claim.status === "open"
-                            ? "Abierto"
-                            : claim.status === "in-progress"
-                              ? "En Proceso"
-                              : "Resuelto"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm">{claim.createdAt}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm">
-                            <Eye className="h-4 w-4 mr-1" />
-                            Ver
-                          </Button>
-                        </div>
+                  {filteredClaims.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        {claims.length === 0 ? "No hay reclamos registrados" : "No se encontraron resultados"}
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    filteredClaims.map((claim) => (
+                      <TableRow key={claim.id}>
+                        <TableCell className="font-medium">#{claim.id_venta}</TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{claim.nombre_cliente}</div>
+                            <div className="text-xs text-muted-foreground">CI: {claim.c_i}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{claim.tipo_reclamo}</Badge>
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">{claim.comentario}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {getEstadoBadge(claim.estado)}
+                            <Select
+                              value={claim.id_estado.toString()}
+                              onValueChange={(value) => handleUpdateClaimStatus(claim.id, Number.parseInt(value))}
+                              disabled={updatingClaim === claim.id}
+                            >
+                              <SelectTrigger className="w-32 h-7 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {estados.map((estado) => (
+                                  <SelectItem key={estado.id} value={estado.id.toString()}>
+                                    {estado.nombre}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {new Date(claim.fecha_inicio).toLocaleDateString("es-ES")}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm" asChild>
+                              <a href={`/venta/${claim.id_venta}`} target="_blank" rel="noopener noreferrer">
+                                <Eye className="h-4 w-4 mr-1" />
+                                Ver
+                              </a>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -307,44 +464,64 @@ export function PostsaleManagement() {
             </div>
 
             <div className="grid gap-4">
-              {surveys.map((survey) => (
-                <Card key={survey.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <p className="font-semibold">{survey.customerName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {survey.bookingId} • {survey.service}
-                        </p>
+              {filteredSurveys.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">
+                  {surveys.length === 0 ? "No hay reseñas registradas" : "No se encontraron resultados"}
+                </div>
+              ) : (
+                filteredSurveys.map((survey) => (
+                  <Card key={survey.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <p className="font-semibold">{survey.nombre_cliente}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Venta #{survey.id_venta} • {survey.nombre_servicio}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <Star
+                              key={star}
+                              className={`h-4 w-4 ${
+                                star <= survey.calificacion_resena
+                                  ? "fill-[#E91E63] text-[#E91E63]"
+                                  : "text-gray-300"
+                              }`}
+                            />
+                          ))}
+                          <span className="ml-2 font-semibold">{survey.calificacion_resena}/5</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        {[...Array(5)].map((_, i) => (
-                          <Star
-                            key={i}
-                            className={`h-4 w-4 ${i < survey.rating ? "fill-amber-400 text-amber-400" : "text-gray-300"}`}
-                          />
-                        ))}
-                        <span className="ml-2 font-semibold">{survey.rating}/5</span>
+                      <p className="text-sm mb-2">{survey.comentario}</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">CI: {survey.c_i}</p>
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={`/venta/${survey.id_venta}`} target="_blank" rel="noopener noreferrer">
+                            <Eye className="h-4 w-4 mr-1" />
+                            Ver venta
+                          </a>
+                        </Button>
                       </div>
-                    </div>
-                    <p className="text-sm mb-2">{survey.feedback}</p>
-                    <p className="text-xs text-muted-foreground">{survey.date}</p>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </div>
 
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">Mostrando {surveys.length} encuestas</p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="sm" disabled>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+            {filteredSurveys.length > 0 && (
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">Mostrando {filteredSurveys.length} reseñas</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" disabled>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </TabsContent>
         </Tabs>
       </CardContent>
