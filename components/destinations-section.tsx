@@ -66,9 +66,7 @@ export function DestinationsSection() {
                   alt={destination.name}
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
-                <div className="absolute right-2 top-2">
-                  <WishlistButton itemId={`dest-${index}`} itemName={destination.name} variant="icon" />
-                </div>
+                {/* Wishlist: requiere ID numérico de lugar (destinations-section usa nombres hardcodeados) */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
                 <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
                   <div className="mb-2 flex items-center gap-2 text-sm">

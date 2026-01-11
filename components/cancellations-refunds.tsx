@@ -1,61 +1,196 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { XCircle, AlertTriangle, Download, CheckCircle2, Clock } from "lucide-react"
-import { useState } from "react"
+import { XCircle, AlertTriangle, Download, CheckCircle2, Clock, Loader2 } from "lucide-react"
+
+type VentaPagada = {
+  id_venta: number
+  monto_total: number
+  cantidad_items: number
+  fecha_inicio_minima: string
+  fecha_inicio_maxima: string
+  estado: string
+  fecha_estado: string
+  items: Array<{
+    id_itinerario: number
+    id_servicio: number
+    nombre_servicio: string
+    descripcion_servicio?: string
+    costo_unitario_bs: number
+    fecha_inicio: string
+    tipo_servicio: string
+    lugar_nombre?: string
+  }> | null
+}
+
+type Reembolso = {
+  id_reembolso: number
+  monto_reembolso: number
+  fk_venta: number
+  monto_original: number
+  estado_venta: string
+  fecha_reembolso: string
+  fecha_viaje: string | null
+  servicios: string[] | null
+}
 
 export function CancellationsRefunds() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
+  const [loadingReembolsos, setLoadingReembolsos] = useState(true)
+  const [solicitando, setSolicitando] = useState(false)
+  const [ventasPagadas, setVentasPagadas] = useState<VentaPagada[]>([])
+  const [reembolsos, setReembolsos] = useState<Reembolso[]>([])
   const [selectedReservation, setSelectedReservation] = useState("")
   const [cancellationReason, setCancellationReason] = useState("")
 
-  const reservations = [
-    {
-      id: "VU2025-ABC123",
-      destination: "Punta Cana, República Dominicana",
-      date: "15 - 22 Marzo 2025",
-      amount: 3400,
-      status: "confirmed",
-    },
-    {
-      id: "VU2025-DEF456",
-      destination: "Madrid, España",
-      date: "10 - 17 Junio 2025",
-      amount: 4200,
-      status: "pending",
-    },
-  ]
+  useEffect(() => {
+    loadVentasPagadas()
+    loadReembolsos()
+  }, [])
 
-  const refundHistory = [
-    {
-      id: "REF-2024-001",
-      reservation: "VU2024-XYZ789",
-      destination: "Cancún, México",
-      originalAmount: 2800,
-      penalty: 280,
-      refundAmount: 2520,
-      status: "completed",
-      date: "15 Enero 2025",
-    },
-    {
-      id: "REF-2024-002",
-      reservation: "VU2024-LMN456",
-      destination: "Buenos Aires, Argentina",
-      originalAmount: 1890,
-      penalty: 189,
-      refundAmount: 1701,
-      status: "processing",
-      date: "28 Diciembre 2024",
-    },
-  ]
+  async function loadVentasPagadas() {
+    setLoading(true)
+    try {
+      const r = await fetch("/api/cliente/mis-viajes", { cache: "no-store" })
+      const data = await r.json()
+      
+      if (r.ok) {
+        // Filtrar solo ventas pagadas que no tienen reembolso
+        const ventasFiltradas = (data.compras || []).filter((v: any) => {
+          return v.estado === "Pagado"
+        })
+        setVentasPagadas(ventasFiltradas)
+      } else {
+        if (r.status === 401 || r.status === 403) {
+          router.push("/login?next=/cancelaciones-reembolsos")
+          return
+        }
+        throw new Error(data?.error ?? "Error cargando ventas")
+      }
+    } catch (err: any) {
+      console.error("Error cargando ventas:", err)
+      toast.error("Error", {
+        description: err.message ?? "No se pudieron cargar las reservas",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const selectedRes = reservations.find((r) => r.id === selectedReservation)
-  const penalty = selectedRes ? selectedRes.amount * 0.1 : 0
-  const refundAmount = selectedRes ? selectedRes.amount * 0.9 : 0
+  async function loadReembolsos() {
+    setLoadingReembolsos(true)
+    try {
+      const r = await fetch("/api/cliente/reembolsos", { cache: "no-store" })
+      const data = await r.json()
+      
+      if (r.ok) {
+        setReembolsos(data.reembolsos || [])
+      } else {
+        if (r.status === 401 || r.status === 403) {
+          router.push("/login?next=/cancelaciones-reembolsos")
+          return
+        }
+        console.error("Error cargando reembolsos:", data?.error)
+      }
+    } catch (err: any) {
+      console.error("Error cargando reembolsos:", err)
+    } finally {
+      setLoadingReembolsos(false)
+    }
+  }
+
+  async function handleSolicitarReembolso() {
+    if (!selectedReservation) {
+      toast.error("Selecciona una reserva")
+      return
+    }
+
+    const idVenta = Number.parseInt(selectedReservation)
+    if (isNaN(idVenta)) {
+      toast.error("Reserva inválida")
+      return
+    }
+
+    setSolicitando(true)
+    try {
+      const r = await fetch("/api/cliente/reembolsos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_venta: idVenta }),
+      })
+
+      const data = await r.json()
+
+      if (r.ok) {
+        toast.success("Reembolso solicitado", {
+          description: "Tu solicitud de reembolso ha sido procesada exitosamente",
+        })
+        setSelectedReservation("")
+        setCancellationReason("")
+        // Recargar datos
+        await loadVentasPagadas()
+        await loadReembolsos()
+      } else {
+        throw new Error(data?.error ?? "Error solicitando reembolso")
+      }
+    } catch (err: any) {
+      console.error("Error solicitando reembolso:", err)
+      toast.error("Error", {
+        description: err.message ?? "No se pudo procesar la solicitud de reembolso",
+      })
+    } finally {
+      setSolicitando(false)
+    }
+  }
+
+  const selectedVenta = ventasPagadas.find((v) => v.id_venta.toString() === selectedReservation)
+  
+  // Calcular penalización y monto a reembolsar (10% penalización según política mostrada)
+  const montoOriginal = selectedVenta?.monto_total || 0
+  const penalizacion = montoOriginal * 0.1
+  const montoReembolso = montoOriginal * 0.9
+
+  // Formatear fecha
+  const formatFecha = (fechaStr: string | null) => {
+    if (!fechaStr) return "N/A"
+    const fecha = new Date(fechaStr)
+    return fecha.toLocaleDateString("es-ES", { year: "numeric", month: "long", day: "numeric" })
+  }
+
+  // Formatear rango de fechas
+  const formatRangoFechas = (fechaMin: string, fechaMax: string) => {
+    if (fechaMin === fechaMax) {
+      return formatFecha(fechaMin)
+    }
+    return `${formatFecha(fechaMin)} - ${formatFecha(fechaMax)}`
+  }
+
+  // Obtener destino de la venta (primer lugar de los items)
+  const getDestino = (venta: VentaPagada) => {
+    if (!venta.items || venta.items.length === 0) return "Destino no especificado"
+    const primerItem = venta.items[0]
+    return primerItem.lugar_nombre || primerItem.nombre_servicio || "Destino no especificado"
+  }
+
+  if (loading || loadingReembolsos) {
+    return (
+      <div className="py-16">
+        <Card className="p-12 text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-[#E91E63]" />
+          <p className="text-muted-foreground">Cargando información...</p>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -75,32 +210,42 @@ export function CancellationsRefunds() {
             <Label htmlFor="reservation">Seleccionar Reserva</Label>
             <Select value={selectedReservation} onValueChange={setSelectedReservation}>
               <SelectTrigger id="reservation">
-                <SelectValue placeholder="Elige una reserva activa" />
+                <SelectValue placeholder="Elige una reserva pagada" />
               </SelectTrigger>
               <SelectContent>
-                {reservations.map((res) => (
-                  <SelectItem key={res.id} value={res.id}>
-                    {res.id} - {res.destination} ({res.date})
+                {ventasPagadas.length === 0 ? (
+                  <SelectItem value="" disabled>
+                    No hay reservas pagadas disponibles
                   </SelectItem>
-                ))}
+                ) : (
+                  ventasPagadas.map((venta) => (
+                    <SelectItem key={venta.id_venta} value={venta.id_venta.toString()}>
+                      Venta #{venta.id_venta} - {getDestino(venta)} ({formatRangoFechas(venta.fecha_inicio_minima, venta.fecha_inicio_maxima)})
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
 
-          {selectedRes && (
+          {selectedVenta && (
             <>
               <div className="border rounded-lg p-4 bg-muted/50 space-y-3">
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Destino</span>
-                  <span className="font-semibold">{selectedRes.destination}</span>
+                  <span className="font-semibold">{getDestino(selectedVenta)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Fechas</span>
-                  <span className="font-semibold">{selectedRes.date}</span>
+                  <span className="font-semibold">
+                    {formatRangoFechas(selectedVenta.fecha_inicio_minima, selectedVenta.fecha_inicio_maxima)}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Monto Original</span>
-                  <span className="font-semibold">${selectedRes.amount.toFixed(2)}</span>
+                  <span className="font-semibold">
+                    Bs. {montoOriginal.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
                 </div>
                 <div className="border-t pt-3 space-y-2">
                   <div className="flex justify-between text-amber-600">
@@ -108,11 +253,15 @@ export function CancellationsRefunds() {
                       <AlertTriangle className="h-4 w-4" />
                       Penalización (10%)
                     </span>
-                    <span className="font-semibold">-${penalty.toFixed(2)}</span>
+                    <span className="font-semibold">
+                      -Bs. {penalizacion.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                   <div className="flex justify-between text-lg">
                     <span className="font-bold">Monto a Reembolsar (90%)</span>
-                    <span className="font-bold text-[#E91E63]">${refundAmount.toFixed(2)}</span>
+                    <span className="font-bold text-[#E91E63]">
+                      Bs. {montoReembolso.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -132,13 +281,27 @@ export function CancellationsRefunds() {
                 <p className="text-sm text-amber-800 dark:text-amber-200">
                   <AlertTriangle className="h-4 w-4 inline mr-2" />
                   <strong>Política de Cancelación:</strong> Se aplicará una penalización del 10% sobre el monto total.
-                  El reembolso se procesará en 5-10 días hábiles a tu método de pago original.
+                  El reembolso se procesará según la política de la empresa y se reflejará en tu método de pago original.
                 </p>
               </div>
 
-              <Button className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90" size="lg">
-                <XCircle className="h-4 w-4 mr-2" />
-                Confirmar Cancelación
+              <Button 
+                className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90" 
+                size="lg"
+                onClick={handleSolicitarReembolso}
+                disabled={solicitando}
+              >
+                {solicitando ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Confirmar Cancelación
+                  </>
+                )}
               </Button>
             </>
           )}
@@ -155,53 +318,61 @@ export function CancellationsRefunds() {
           <CardDescription>Seguimiento de tus solicitudes de cancelación y reembolsos</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {refundHistory.map((refund) => (
-            <div key={refund.id} className="border rounded-lg p-4 space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-semibold">{refund.destination}</p>
-                  <p className="text-sm text-muted-foreground">Reserva: {refund.reservation}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Solicitado: {refund.date}</p>
+          {reembolsos.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No tienes reembolsos registrados</p>
+            </div>
+          ) : (
+            reembolsos.map((refund) => (
+              <div key={refund.id_reembolso} className="border rounded-lg p-4 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-semibold">
+                      {refund.servicios && refund.servicios.length > 0 
+                        ? refund.servicios.join(", ")
+                        : "Venta #" + refund.fk_venta}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Venta: #{refund.fk_venta}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Solicitado: {formatFecha(refund.fecha_reembolso)}
+                    </p>
+                    {refund.fecha_viaje && (
+                      <p className="text-xs text-muted-foreground">
+                        Fecha del viaje: {formatFecha(refund.fecha_viaje)}
+                      </p>
+                    )}
+                  </div>
+                  <Badge variant="default" className="bg-green-500">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Completado
+                  </Badge>
                 </div>
-                <Badge
-                  variant={refund.status === "completed" ? "default" : "secondary"}
-                  className={refund.status === "completed" ? "bg-green-500" : ""}
-                >
-                  {refund.status === "completed" ? (
-                    <>
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Completado
-                    </>
-                  ) : (
-                    <>
-                      <Clock className="h-3 w-3 mr-1" />
-                      Procesando
-                    </>
-                  )}
-                </Badge>
-              </div>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Monto Original</p>
-                  <p className="font-semibold">${refund.originalAmount.toFixed(2)}</p>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Monto Original</p>
+                    <p className="font-semibold">
+                      Bs. {refund.monto_original.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Monto Reembolsado</p>
+                    <p className="font-semibold text-green-600">
+                      Bs. {refund.monto_reembolso.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Estado</p>
+                    <p className="font-semibold">{refund.estado_venta}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-muted-foreground">Penalización</p>
-                  <p className="font-semibold text-amber-600">-${refund.penalty.toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Reembolsado</p>
-                  <p className="font-semibold text-green-600">${refund.refundAmount.toFixed(2)}</p>
-                </div>
-              </div>
-              {refund.status === "completed" && (
                 <Button variant="outline" size="sm" className="w-full bg-transparent">
                   <Download className="h-4 w-4 mr-2" />
-                  Descargar Nota de Crédito
+                  Descargar Comprobante
                 </Button>
-              )}
-            </div>
-          ))}
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
     </div>

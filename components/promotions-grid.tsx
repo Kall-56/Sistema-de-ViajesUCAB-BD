@@ -345,9 +345,16 @@ export function PromotionsGrid() {
                   </Badge>
                 )}
 
-                <div className="absolute right-4 bottom-4">
-                  <WishlistButton itemId={promo.id} itemName={promo.name} variant="icon" />
-                </div>
+                {promo.servicioId && (
+                  <div className="absolute right-4 bottom-4">
+                    <WishlistButton 
+                      itemId={promo.servicioId} 
+                      itemName={promo.name} 
+                      itemType="servicio"
+                      variant="icon" 
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="p-6">

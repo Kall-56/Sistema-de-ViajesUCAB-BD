@@ -72,6 +72,21 @@ export async function POST(req: Request) {
       );
     }
 
+    // Validar restricciones del paquete antes de comprar
+    try {
+      await pool.query(
+        `SELECT cliente_cumple_restricciones($1, $2) AS cumple`,
+        [clienteId, id_paquete]
+      );
+      // Si llegamos aquí, el cliente cumple las restricciones (la función lanza EXCEPTION si no cumple)
+    } catch (validacionError: any) {
+      // La función lanza EXCEPTION con mensaje descriptivo si no cumple
+      return NextResponse.json(
+        { error: validacionError.message ?? "No cumple con las restricciones del paquete" },
+        { status: 400 }
+      );
+    }
+
     // Convertir las fechas de string ISO a formato PostgreSQL timestamp
     // PostgreSQL espera timestamps en formato 'YYYY-MM-DD HH:MM:SS'
     const fechasTimestamp = fechas_inicio.map((fechaStr) => {

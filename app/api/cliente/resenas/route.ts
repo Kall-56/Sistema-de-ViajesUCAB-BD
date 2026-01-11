@@ -80,7 +80,7 @@ export async function POST(req: Request) {
 
     // Verificar si ya existe una reseña para este itinerario
     const { rows: resenaExistente } = await pool.query(
-      `SELECT id FROM resena WHERE fk_itinerario_servicio = $1`,
+      `SELECT id FROM resena WHERE fk_itinerario = $1`,
       [id_itinerario]
     );
 

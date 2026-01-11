@@ -33,6 +33,10 @@ export async function POST(req: Request) {
         datos_metodo_pago: any; // Datos específicos según el método
         monto_pago: number; // Monto a pagar en Bs
         denominacion: string; // 'VEN' u otra
+        plan_cuotas?: {
+          num_cuotas: number;
+          tasa_interes: number;
+        };
       }>;
     };
 
@@ -53,7 +57,7 @@ export async function POST(req: Request) {
 
     // Procesar cada venta
     for (const ventaData of ventas) {
-      const { id_venta, metodo_pago, datos_metodo_pago, monto_pago, denominacion } = ventaData;
+      const { id_venta, metodo_pago, datos_metodo_pago, monto_pago, denominacion, plan_cuotas } = ventaData;
 
       try {
         // 1. Validar que la venta pertenece al cliente y está pendiente
@@ -235,22 +239,96 @@ export async function POST(req: Request) {
           continue;
         }
 
-        // 3. Registrar el pago usando la función registrar_pago
-        // La función maneja automáticamente el cambio de estado a "Pagado" si se completa el pago
-        const { rows: pagoRows } = await pool.query(
-          `SELECT registrar_pago($1, $2, $3, $4) AS id_pago`,
-          [id_venta, monto_pago, id_metodo_pago, denominacion || "VEN"]
-        );
+        // 3. Procesar pago según si es plan de cuotas o pago único
+        let id_pago: number;
+        const planCuotas = plan_cuotas;
 
-        const id_pago = pagoRows[0]?.id_pago;
+        if (planCuotas && planCuotas.num_cuotas > 1) {
+          // Plan de cuotas: crear plan y pagar primera cuota
+          try {
+            // Crear plan de cuotas
+            await pool.query(
+              `SELECT agregar_cuotas($1, $2, $3, $4) AS resultado`,
+              [
+                id_venta,
+                venta.monto_total,
+                planCuotas.tasa_interes,
+                planCuotas.num_cuotas,
+              ]
+            );
 
-        if (!id_pago) {
-          resultados.push({
-            id_venta,
-            exito: false,
-            error: "Error registrando pago",
-          });
-          continue;
+            // Obtener la primera cuota (la que tiene fecha_inicio más antigua)
+            const { rows: primeraCuotaRows } = await pool.query(
+              `
+              SELECT c.id_cuota, c.monto_cuota
+              FROM cuota c
+              JOIN plan_cuotas pc ON pc.id_plan_cuotas = c.fk_plan_cuotas
+              WHERE pc.fk_venta = $1
+              ORDER BY c.id_cuota ASC
+              LIMIT 1
+              `,
+              [id_venta]
+            );
+
+            if (!primeraCuotaRows?.length) {
+              resultados.push({
+                id_venta,
+                exito: false,
+                error: "Error obteniendo primera cuota",
+              });
+              continue;
+            }
+
+            const primeraCuota = primeraCuotaRows[0];
+            const montoCuota = Number(primeraCuota.monto_cuota);
+
+            // Pagar la primera cuota
+            const { rows: pagarCuotaRows } = await pool.query(
+              `SELECT pagar_cuota($1, $2, $3, $4) AS id_pago`,
+              [
+                primeraCuota.id_cuota,
+                montoCuota,
+                id_metodo_pago,
+                denominacion || "VEN",
+              ]
+            );
+
+            id_pago = pagarCuotaRows[0]?.id_pago;
+
+            if (!id_pago) {
+              resultados.push({
+                id_venta,
+                exito: false,
+                error: "Error pagando primera cuota",
+              });
+              continue;
+            }
+          } catch (cuotaError: any) {
+            console.error(`Error procesando cuotas para venta ${id_venta}:`, cuotaError);
+            resultados.push({
+              id_venta,
+              exito: false,
+              error: cuotaError?.message ?? "Error procesando plan de cuotas",
+            });
+            continue;
+          }
+        } else {
+          // Pago único: usar registrar_pago directamente
+          const { rows: pagoRows } = await pool.query(
+            `SELECT registrar_pago($1, $2, $3, $4) AS id_pago`,
+            [id_venta, monto_pago, id_metodo_pago, denominacion || "VEN"]
+          );
+
+          id_pago = pagoRows[0]?.id_pago;
+
+          if (!id_pago) {
+            resultados.push({
+              id_venta,
+              exito: false,
+              error: "Error registrando pago",
+            });
+            continue;
+          }
         }
 
         // 4. Obtener estado final de la venta

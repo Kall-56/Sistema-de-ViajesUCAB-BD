@@ -239,9 +239,16 @@ export function PromotionsSection() {
                     Hot Deal
                   </Badge>
                 )}
-                <div className="absolute left-4 bottom-4">
-                  <WishlistButton itemId={`promo-${index}`} itemName={promo.title} variant="icon" />
-                </div>
+                {promo.servicioId && (
+                  <div className="absolute left-4 bottom-4">
+                    <WishlistButton 
+                      itemId={promo.servicioId} 
+                      itemName={promo.title} 
+                      itemType="servicio"
+                      variant="icon" 
+                    />
+                  </div>
+                )}
               </div>
               <div className="p-6">
                 <h3 className="mb-2 text-xl font-bold">{promo.title}</h3>

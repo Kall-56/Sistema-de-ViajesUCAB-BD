@@ -172,9 +172,7 @@ export function FeaturedPackages() {
                   className="h-64 w-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
                 <Badge className="absolute left-4 top-4 bg-[#E91E63] text-white border-0">{pkg.tag}</Badge>
-                <div className="absolute right-4 top-4">
-                  <WishlistButton itemId={pkg.id} itemName={pkg.name} variant="icon" />
-                </div>
+                {/* Wishlist no disponible para paquetes (solo servicio o lugar en BD) */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
 

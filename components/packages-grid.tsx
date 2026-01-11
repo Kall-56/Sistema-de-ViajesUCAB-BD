@@ -310,9 +310,7 @@ export function PackagesGrid() {
                   className="h-56 w-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
                 <Badge className="absolute left-4 top-4 bg-primary text-primary-foreground">{pkg.type}</Badge>
-                <div className="absolute right-4 top-4">
-                  <WishlistButton itemId={pkg.id} itemName={pkg.name} variant="icon" />
-                </div>
+                {/* Wishlist no disponible para paquetes (solo servicio o lugar en BD) */}
               </div>
 
               <div className="p-5">

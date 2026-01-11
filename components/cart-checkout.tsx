@@ -266,12 +266,26 @@ export function CartCheckout() {
           }
         }
 
+        // Determinar plan de cuotas si aplica
+        const numCuotas = Number.parseInt(installments);
+        let planCuotas: { num_cuotas: number; tasa_interes: number } | undefined;
+        
+        if (numCuotas > 1) {
+          // Mapear número de cuotas a tasa de interés según las opciones disponibles
+          const tasaInteres = numCuotas === 3 ? 3 : numCuotas === 6 ? 6 : numCuotas === 12 ? 12 : 0;
+          planCuotas = {
+            num_cuotas: numCuotas,
+            tasa_interes: tasaInteres,
+          };
+        }
+
         return {
           id_venta: venta.id_venta,
           metodo_pago: metodoPagoBD,
           datos_metodo_pago: datosMetodoPago,
           monto_pago: venta.monto_total, // Monto total de la venta en Bs
           denominacion: "VEN",
+          plan_cuotas: planCuotas,
         }
       })
 
