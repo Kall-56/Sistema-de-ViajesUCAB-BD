@@ -129,35 +129,6 @@ create table if not exists tipo_reclamo
         primary key (id)
 );
 
-create table if not exists reclamo
-(
-    id              serial,
-    comentario      varchar not null,
-    fk_cliente      integer not null,
-    fk_tipo_reclamo integer not null,
-    fk_itinerario   integer not null,
-    constraint reclamo_pk
-        primary key (id),
-    constraint reclamo_cliente_id_fk
-        foreign key (fk_cliente) references cliente,
-    constraint reclamo_tipo_reclamo_id_fk
-        foreign key (fk_tipo_reclamo) references tipo_reclamo
-);
-
-create table if not exists rec_est
-(
-    fecha_inicio date    not null,
-    fecha_final  date,
-    fk_estado    integer not null,
-    fk_reclamo   integer not null,
-    constraint rec_est_pk
-        primary key (fk_reclamo, fk_estado),
-    constraint rec_est_reclamo_id_fk
-        foreign key (fk_reclamo) references reclamo,
-    constraint rec_est_estado_id_fk
-        foreign key (fk_estado) references estado
-);
-
 create table if not exists usuario
 (
     id           serial,
@@ -298,6 +269,9 @@ create table if not exists sistema_milla
     tipo_transaccion varchar not null,
     fk_metodo_pago   integer not null,
     fk_cliente       integer not null,
+    descripcion      varchar(255),
+    prueba           varchar,
+    prueba234        varchar,
     constraint sistema_milla_pk
         primary key (id_sistema_milla),
     constraint sistema_milla_metodo_pago_id_metodo_pago_fk_cliente_fk
@@ -330,6 +304,7 @@ create table if not exists cuota
     id_cuota       serial,
     monto_cuota    integer not null,
     fk_plan_cuotas integer,
+    fecha_pagar    date    not null,
     primary key (id_cuota),
     constraint id_plan_cuotas
         foreign key (fk_plan_cuotas) references plan_cuotas
@@ -374,7 +349,7 @@ create table if not exists ven_est
     fk_venta     integer                             not null,
     fecha_inicio timestamp default CURRENT_TIMESTAMP not null,
     fecha_fin    timestamp,
-    primary key (fk_venta, fk_estado),
+    primary key (fk_venta, fk_estado, fecha_inicio),
     constraint id_venta
         foreign key (fk_venta) references venta,
     constraint ven_est_estado_id_fk
@@ -581,16 +556,6 @@ create table if not exists paquete
         primary key (id)
 );
 
-create table if not exists restriccion
-(
-    id          serial,
-    descripcion varchar not null,
-    fk_paquete  integer not null,
-    primary key (id),
-    constraint restriccion_paquete_id_fk
-        foreign key (fk_paquete) references paquete
-);
-
 create table if not exists itinerario
 (
     fk_servicio       integer   not null,
@@ -606,13 +571,46 @@ create table if not exists itinerario
         foreign key (fk_servicio) references servicio
 );
 
+create table if not exists reclamo
+(
+    id              serial,
+    comentario      varchar not null,
+    fk_cliente      integer not null,
+    fk_tipo_reclamo integer not null,
+    fk_itinerario   integer not null,
+    constraint reclamo_pk
+        primary key (id),
+    constraint reclamo_cliente_id_fk
+        foreign key (fk_cliente) references cliente,
+    constraint reclamo_tipo_reclamo_id_fk
+        foreign key (fk_tipo_reclamo) references tipo_reclamo,
+    constraint reclamo_itinerario_id_fk
+        foreign key (fk_itinerario) references itinerario
+);
+
+create table if not exists rec_est
+(
+    fecha_inicio date    not null,
+    fecha_final  date,
+    fk_estado    integer not null,
+    fk_reclamo   integer not null,
+    constraint rec_est_pk
+        primary key (fk_reclamo, fk_estado),
+    constraint rec_est_reclamo_id_fk
+        foreign key (fk_reclamo) references reclamo,
+    constraint rec_est_estado_id_fk
+        foreign key (fk_estado) references estado
+);
+
 create table if not exists resena
 (
-    id                     serial,
-    calificacion_resena    numeric(3, 1),
-    comentario             varchar not null,
-    fk_itinerario_servicio integer not null,
+    id                  serial,
+    calificacion_resena numeric(5, 1) not null,
+    comentario          varchar       not null,
+    fk_itinerario       integer       not null,
     primary key (id),
+    constraint resena_fks
+        foreign key (fk_itinerario) references itinerario,
     constraint calificacion_resena_check
         check ((calificacion_resena >= (0)::numeric) AND (calificacion_resena <= (5)::numeric))
 );
@@ -644,6 +642,39 @@ create table if not exists pasajero
     constraint pasajero_venta_id_venta_fk
         foreign key (fk_venta) references venta
 );
+
+create table if not exists restriccion
+(
+    id_restriccion    serial,
+    fk_paquete        integer      not null,
+    caracteristica    varchar(50)  not null,
+    operador          varchar(10)  not null,
+    valor_restriccion varchar(100) not null,
+    constraint restriccion_pk
+        primary key (id_restriccion),
+    constraint restriccion_paquete_fk
+        foreign key (fk_paquete) references paquete
+);
+
+create or replace function alterar_paquete(i_id_paquete integer, i_nombre character varying, i_descripcion character varying, i_tipo_paquete character varying, i_ids_servicios integer[]) returns integer
+    language plpgsql
+as
+$$
+BEGIN
+    -- 1. Actualizar datos del paquete principal
+    UPDATE paquete SET nombre = i_nombre, descripcion = i_descripcion, tipo_paquete = i_tipo_paquete
+    WHERE id = i_id_paquete;
+
+    -- 3. Actualizar la relación N-N (borrar y volver a crear)
+    DELETE FROM paquete_servicio WHERE fk_paquete = i_id_paquete;
+    IF i_ids_servicios IS NOT NULL THEN
+        INSERT INTO paquete_servicio(fk_paquete, fk_servicio)
+        SELECT i_id_paquete, unnest(i_ids_servicios);
+    END IF;
+
+    RETURN i_id_paquete;
+END;
+$$;
 
 create or replace function agregar_permisos_rol(id_rol integer, ids_permisos integer[]) returns integer
     language plpgsql
@@ -1127,40 +1158,6 @@ BEGIN
 END;
 $$;
 
-create or replace function insertar_paquete(i_id_paquete integer, i_nombre character varying, i_descripcion character varying, i_tipo_paquete character varying, i_restricciones character varying[], i_ids_servicios integer[]) returns integer
-    language plpgsql
-as
-$$
-DECLARE
-    restriccion_desc varchar;
-    id_servicio integer;
-BEGIN
-    -- 1. Insertar el paquete principal.
-    INSERT INTO paquete(id, nombre, descripcion, tipo_paquete)
-    VALUES (i_id_paquete, i_nombre, i_descripcion, i_tipo_paquete);
-
-    -- 2. Insertar las restricciones asociadas.
-    IF i_restricciones IS NOT NULL THEN
-        FOREACH restriccion_desc IN ARRAY i_restricciones
-        LOOP
-            INSERT INTO restriccion(descripcion, fk_paquete)
-            VALUES (restriccion_desc, i_id_paquete);
-        END LOOP;
-    END IF;
-
-    -- 3. Vincular los servicios al paquete en la tabla N-N.
-    IF i_ids_servicios IS NOT NULL THEN
-        FOREACH id_servicio IN ARRAY i_ids_servicios
-        LOOP
-            INSERT INTO paquete_servicio(fk_paquete, fk_servicio)
-            VALUES (i_id_paquete, id_servicio);
-        END LOOP;
-    END IF;
-
-    RETURN i_id_paquete;
-END;
-$$;
-
 create or replace function obtener_paquete(i_id_paquete integer)
     returns TABLE(id_paquete integer, nombre_paquete character varying, descripcion_paquete character varying, tipo_paquete character varying, restricciones character varying[], ids_servicios integer[])
     language plpgsql
@@ -1177,58 +1174,6 @@ BEGIN
         (SELECT array_agg(ps.fk_servicio) FROM paquete_servicio ps WHERE ps.fk_paquete = p.id)
     FROM paquete p
     WHERE p.id = i_id_paquete;
-END;
-$$;
-
-create or replace function alterar_paquete(i_id_paquete integer, i_nombre character varying, i_descripcion character varying, i_tipo_paquete character varying, i_restricciones character varying[], i_ids_servicios integer[]) returns integer
-    language plpgsql
-as
-$$
-BEGIN
-    -- 1. Actualizar datos del paquete principal
-    UPDATE paquete SET nombre = i_nombre, descripcion = i_descripcion, tipo_paquete = i_tipo_paquete
-    WHERE id = i_id_paquete;
-
-    -- 2. Actualizar restricciones (borrar y volver a crear)
-    DELETE FROM restriccion WHERE fk_paquete = i_id_paquete;
-    IF i_restricciones IS NOT NULL THEN
-        INSERT INTO restriccion(descripcion, fk_paquete)
-        SELECT unnest(i_restricciones), i_id_paquete;
-    END IF;
-
-    -- 3. Actualizar la relación N-N (borrar y volver a crear)
-    DELETE FROM paquete_servicio WHERE fk_paquete = i_id_paquete;
-    IF i_ids_servicios IS NOT NULL THEN
-        INSERT INTO paquete_servicio(fk_paquete, fk_servicio)
-        SELECT i_id_paquete, unnest(i_ids_servicios);
-    END IF;
-
-    RETURN i_id_paquete;
-END;
-$$;
-
-create or replace function eliminar_paquete(i_id_paquete integer) returns integer
-    language plpgsql
-as
-$$
-BEGIN
-    -- Con la nueva lógica, un paquete puede ser eliminado sin afectar ventas pasadas,
-    -- ya que el itinerario es independiente.
-
-    -- 1. Eliminar restricciones
-    DELETE FROM restriccion WHERE fk_paquete = i_id_paquete;
-
-    -- 2. Eliminar relaciones en la tabla N-N
-    DELETE FROM paquete_servicio WHERE fk_paquete = i_id_paquete;
-
-    -- 3. Eliminar el paquete
-    DELETE FROM paquete WHERE id = i_id_paquete;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Paquete con id % no encontrado.', i_id_paquete;
-    END IF;
-
-    RETURN i_id_paquete;
 END;
 $$;
 
@@ -1643,7 +1588,7 @@ BEGIN
 END;
 $$;
 
-create or replace function rep_servicios_populares(fecha_inicio date DEFAULT NULL::date, fecha_fin date DEFAULT NULL::date, limite integer DEFAULT 20)
+create or replace function rep_servicios_populares(fecha_inicio date DEFAULT NULL::date, limite integer DEFAULT 20)
     returns TABLE(id_servicio integer, nombre_servicio character varying, tipo_servicio character varying, nombre_proveedor character varying, lugar_destino character varying, veces_vendido bigint, ingresos_totales numeric, precio_promedio numeric, denominacion character varying)
     language plpgsql
 as
@@ -2174,3 +2119,327 @@ BEGIN
     LIMIT COALESCE(limite, 10);
 END;
 $$;
+
+create or replace function agregar_resena(id_itinerario integer, i_calificacion_resena numeric, i_comentario character varying) returns integer
+    language plpgsql
+as
+$$
+BEGIN
+    IF EXISTS ( SELECT *
+                FROM venta
+                JOIN ven_est ON ven_est.fk_venta = venta.id_venta
+                JOIN estado ON ven_est.fk_estado = estado.id
+                JOIN itinerario ON venta.id_venta = itinerario.fk_venta
+                WHERE itinerario.id = id_itinerario
+                AND estado.nombre = 'Pagado' )
+        THEN
+        INSERT INTO resena(calificacion_resena, comentario, fk_itinerario)
+        VALUES (i_calificacion_resena, i_comentario, id_itinerario);
+    ELSE
+        RAISE EXCEPTION 'No se puede agregar una reseña a un itinerario que no haya sido pagado';
+    end if;
+    RETURN 1;
+end;
+$$;
+
+create or replace function agregar_reclamo(i_comentario character varying, id_cliente integer, id_tipo_reclamo integer, id_itinerario integer) returns integer
+    language plpgsql
+as
+$$
+DECLARE id_reclamo integer;
+BEGIN
+    INSERT INTO reclamo(comentario, fk_cliente, fk_tipo_reclamo, fk_itinerario)
+    VALUES (i_comentario, id_cliente, id_tipo_reclamo, id_itinerario)
+    RETURNING id INTO id_reclamo;
+    INSERT INTO rec_est(fecha_inicio, fk_estado, fk_reclamo)
+    VALUES (CURRENT_DATE, 8, id_reclamo); /*ESTADO 8 = En Espera*/
+    RETURN 1;
+END;
+$$;
+
+create or replace function cambiar_estado_reclamo(id_reclamo integer, id_estado integer) returns integer
+    language plpgsql
+as
+$$
+BEGIN
+    UPDATE rec_est
+        SET fecha_final = CURRENT_DATE
+        WHERE fk_reclamo = id_reclamo
+        AND fecha_final IS NULL;
+
+    INSERT INTO rec_est(fecha_inicio, fk_estado, fk_reclamo)
+    VALUES (CURRENT_DATE, id_estado, id_reclamo); /*ESTADO 8 = En Espera*/
+    RETURN 1;
+END;
+$$;
+
+create or replace function listar_deseos(i_fk_cliente integer, i_fk_lugar integer DEFAULT NULL::integer, i_fk_servicio integer DEFAULT NULL::integer) returns void
+    language plpgsql
+as
+$$
+BEGIN
+    IF (i_fk_lugar IS NOT NULL AND i_fk_servicio IS NOT NULL) THEN
+        RAISE EXCEPTION 'No se pueden asignar un lugar y un servicio al mismo tiempo.';
+    END IF;
+
+    IF (i_fk_lugar IS NULL AND i_fk_servicio IS NULL) THEN
+        RAISE EXCEPTION 'Debe proporcionar al menos un ID de lugar o de servicio.';
+    END IF;
+
+    INSERT INTO lista_deseo (fk_cliente, fk_lugar, fk_servicio)
+    VALUES (i_fk_cliente, i_fk_lugar, i_fk_servicio);
+
+EXCEPTION
+    WHEN foreign_key_violation THEN
+        RAISE EXCEPTION 'Error: Uno de los IDs proporcionados (cliente, lugar o servicio) no existe en la base de datos.';
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Ocurrió un error inesperado: %', SQLERRM;
+END;
+$$;
+
+create or replace procedure realizar_reembolso(i_id_venta integer)
+    language plpgsql
+as
+$$
+DECLARE
+    v_monto_total bigint;
+    v_id_reembolso integer;
+    v_id_estado_pagado integer;
+    v_id_estado_reembolsado integer;
+    v_fk_metodo_pago integer;
+    v_fk_cambio_moneda integer;
+    v_denominacion varchar;
+BEGIN
+    SELECT monto_total INTO v_monto_total
+    FROM venta
+    WHERE id_venta = i_id_venta;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'La venta con ID % no existe.', i_id_venta;
+    END IF;
+
+    SELECT id INTO v_id_estado_pagado FROM estado WHERE nombre = 'Pagado';
+    SELECT id INTO v_id_estado_reembolsado FROM estado WHERE nombre = 'Reembolsado';
+
+    -- Validar que la venta esté en estado 'Pagado' antes de reembolsar
+    IF NOT EXISTS (
+        SELECT 1 FROM ven_est
+        WHERE fk_venta = i_id_venta AND fk_estado = v_id_estado_pagado AND fecha_fin IS NULL
+    ) THEN
+        RAISE EXCEPTION 'La venta % no se encuentra en estado "Pagado". No es posible realizar el reembolso.', i_id_venta;
+    END IF;
+
+
+    INSERT INTO reembolso (monto_reembolso, fk_venta)
+    VALUES (v_monto_total, i_id_venta)
+    RETURNING id_reembolso INTO v_id_reembolso;
+
+    UPDATE ven_est
+    SET fecha_fin = CURRENT_TIMESTAMP
+    WHERE fk_venta = i_id_venta AND fecha_fin IS NULL;
+
+    INSERT INTO ven_est (fk_estado, fk_venta, fecha_inicio)
+    VALUES (v_id_estado_reembolsado, i_id_venta, CURRENT_TIMESTAMP);
+
+    -- Registrar el movimiento en la tabla PAGO (Salida por reembolso)
+    --
+    SELECT fk_metodo_pago, fk_cambio_moneda, denominacion
+    INTO v_fk_metodo_pago, v_fk_cambio_moneda, v_denominacion
+    FROM pago
+    WHERE fk_venta = i_id_venta
+    LIMIT 1;
+
+    INSERT INTO pago (monto, fecha_hora, denominacion, fk_cambio_moneda, fk_metodo_pago, fk_reembolso, fk_reembolso_venta_id)
+    VALUES (v_monto_total, CURRENT_TIMESTAMP, v_denominacion, v_fk_cambio_moneda, v_fk_metodo_pago, v_id_reembolso, i_id_venta);
+
+    RAISE NOTICE 'Procedimiento completado: La venta % ha sido reembolsada exitosamente por un monto de %.', i_id_venta, v_monto_total;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Error al procesar el reembolso: %', SQLERRM;
+END;
+$$;
+
+create or replace procedure gestionar_restriccion_paquete(i_id_usuario integer, i_id_paquete integer, i_caracteristica character varying, i_operador character varying, i_valor character varying)
+    language plpgsql
+as
+$$
+DECLARE
+    v_rol varchar;
+    v_id_proveedor_u integer;
+BEGIN
+    -- Identifica al usuario y su rol
+    SELECT r.nombre, u.fk_proveedor INTO v_rol, v_id_proveedor_u
+    FROM usuario u
+    JOIN rol r ON u.fk_rol = r.id
+    WHERE u.id = i_id_usuario;
+
+    /*-- Validar permisos
+    IF v_rol = 'ADMIN' THEN
+        NULL;
+    ELSIF v_rol = 'PROVEEDOR' THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM paquete_servicio ps
+            JOIN servicio s ON ps.fk_servicio = s.id
+            WHERE ps.fk_paquete = i_id_paquete AND s.fk_proveedor = v_id_proveedor_u
+        ) THEN
+            RAISE EXCEPTION 'Acceso denegado: Usted no es dueño de los servicios en este paquete.';
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'El rol % no tiene permisos para gestionar restricciones.', v_rol;
+    END IF;*/
+
+    -- Insertar la restricción en la tabla
+    INSERT INTO restriccion (fk_paquete, caracteristica, operador, valor_restriccion)
+    VALUES (i_id_paquete, LOWER(i_caracteristica), i_operador, LOWER(i_valor));
+
+    RAISE NOTICE 'Restricción aplicada: El paquete % ahora requiere % % %',
+                 i_id_paquete, i_caracteristica, i_operador, i_valor;
+END;
+$$;
+
+create or replace function cliente_cumple_restricciones(i_id_cliente integer, i_id_paquete integer) returns boolean
+    language plpgsql
+as
+$$
+DECLARE
+    v_res record;
+    v_cliente record;
+    v_cumple boolean;
+BEGIN
+    -- 1. Obtener datos que SÍ existen en la tabla cliente
+    SELECT *, extract(year from age(fecha_nacimiento))::integer as edad
+    INTO v_cliente FROM cliente WHERE id = i_id_cliente;
+
+    -- 2. Revisar cada restricción del paquete
+    FOR v_res IN (SELECT * FROM restriccion WHERE fk_paquete = i_id_paquete) LOOP
+
+        -- VALIDACIÓN DE EDAD
+        IF v_res.caracteristica = 'edad' THEN
+            IF v_res.operador = '>' THEN v_cumple := (v_cliente.edad > v_res.valor_restriccion::integer);
+            ELSIF v_res.operador = '<' THEN v_cumple := (v_cliente.edad < v_res.valor_restriccion::integer);
+            ELSIF v_res.operador = '=' THEN v_cumple := (v_cliente.edad = v_res.valor_restriccion::integer);
+            END IF;
+
+            IF NOT v_cumple THEN
+                RAISE EXCEPTION 'Bloqueado: El cliente tiene % años y se requiere % %',
+                                v_cliente.edad, v_res.operador, v_res.valor_restriccion;
+            END IF;
+
+        -- VALIDACIÓN DE ESTADO CIVIL
+        ELSIF v_res.caracteristica = 'estado_civil' THEN
+            IF v_res.operador = '=' THEN
+                v_cumple := (v_cliente.estado_civil::text = v_res.valor_restriccion);
+            ELSIF v_res.operador = '!=' THEN
+                v_cumple := (v_cliente.estado_civil::text != v_res.valor_restriccion);
+            END IF;
+
+            IF NOT v_cumple THEN
+                RAISE EXCEPTION 'Bloqueado: El paquete es solo para personas %', v_res.valor_restriccion;
+            END IF;
+
+
+        ELSE
+            RAISE NOTICE 'Nota: El paquete tiene una restricción de "%" que debe ser verificada manualmente.', v_res.caracteristica;
+        END IF;
+
+    END LOOP;
+
+    RETURN true;
+END;
+$$;
+
+create or replace function agregar_cuotas(i_id_venta integer, i_tasa_interes integer, num_cuotas integer) returns integer
+    language plpgsql
+as
+$$
+DECLARE id_plan integer;
+        ids_cuotas integer;
+        monto_venta bigint;
+        monto_cuota_interes bigint;
+BEGIN
+    INSERT INTO plan_cuotas(tasa_interes, fk_venta)
+    VALUES (i_tasa_interes,i_id_venta)
+    RETURNING id_plan_cuotas into id_plan;
+
+    monto_venta = (SELECT monto_total
+                   FROM venta
+                   WHERE id_venta = i_id_venta);
+
+    monto_cuota_interes = (monto_venta * ((i_tasa_interes / 100)+1)) / num_cuotas;
+
+    FOR i IN 1..num_cuotas
+        LOOP
+            INSERT INTO cuota(monto_cuota, fk_plan_cuotas, fecha_pagar)
+            VALUES (monto_cuota_interes,id_plan,CURRENT_DATE+i*30)
+            RETURNING id_cuota into ids_cuotas;
+
+            INSERT INTO cuo_ecuo(fk_cuota, fk_estado, fecha_inicio)
+            VALUES (ids_cuotas,1,CURRENT_DATE);
+        end loop;
+    RETURN 1;
+end;
+$$;
+
+create or replace function pagar_cuota(i_id_cuota integer, monto bigint, i_fk_metodo_pago integer, i_denominacion character varying) returns integer
+    language plpgsql
+as
+$$
+BEGIN
+    IF EXISTS ( SELECT *
+                FROM venta
+                JOIN ven_est ON ven_est.fk_venta = venta.id_venta
+                JOIN estado ON ven_est.fk_estado = estado.id
+                JOIN plan_cuotas ON venta.id_venta = plan_cuotas.fk_venta
+                JOIN public.cuota c on plan_cuotas.id_plan_cuotas = c.fk_plan_cuotas
+                WHERE c.id_cuota = i_id_cuota
+                AND estado.nombre = 'pendiente')
+    THEN
+        IF (SELECT monto_cuota FROM cuota WHERE id_cuota = i_id_cuota) = monto THEN
+            UPDATE cuo_ecuo
+            SET fecha_fin = current_date
+            WHERE fk_cuota = i_id_cuota;
+
+            INSERT INTO cuo_ecuo(fk_cuota, fk_estado, fecha_inicio)
+            VALUES (i_id_cuota,2,current_date);
+
+            PERFORM registrar_pago((Select fk_venta
+                                                    from plan_cuotas
+                                                    JOIN cuota ON plan_cuotas.id_plan_cuotas = cuota.fk_plan_cuotas
+                                                    where cuota.id_cuota = i_id_cuota)
+                                        ,monto
+                                        ,i_fk_metodo_pago
+                                        ,i_denominacion);
+        ELSE
+            RAISE EXCEPTION 'El monto tiene que ser igual al de la cuota';
+        end if;
+    ELSE
+        RAISE EXCEPTION 'No se puede pagar una cuota a una venta que ya haya sido pagada';
+    end if;
+    RETURN 1;
+end;
+$$;
+
+create or replace function insertar_paquete(i_id_paquete integer, i_nombre character varying, i_descripcion character varying, i_tipo_paquete character varying, i_ids_servicios integer[]) returns integer
+    language plpgsql
+as
+$$
+DECLARE
+    id_servicio integer;
+BEGIN
+    INSERT INTO paquete(id, nombre, descripcion, tipo_paquete)
+    VALUES (i_id_paquete, i_nombre, i_descripcion, i_tipo_paquete);
+
+    IF i_ids_servicios IS NOT NULL THEN
+        FOREACH id_servicio IN ARRAY i_ids_servicios
+        LOOP
+            INSERT INTO paquete_servicio(fk_paquete, fk_servicio)
+            VALUES (i_id_paquete, id_servicio);
+        END LOOP;
+    END IF;
+
+    RETURN i_id_paquete;
+END;
+$$;
+
+

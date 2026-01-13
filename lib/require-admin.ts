@@ -71,3 +71,23 @@ export function requireCliente() {
 
   return { ok: true as const, session };
 }
+
+/**
+ * Valida que el usuario sea admin (rolId = 3) o tenga permisos administrativos
+ */
+export function requireAdmin() {
+  const session = getSessionUser();
+  if (!session)
+    return { ok: false as const, status: 401, error: "No autenticado" };
+
+  // Admin tiene rolId = 3
+  if (session.rolId === 3) {
+    return { ok: true as const, session };
+  }
+
+  return { 
+    ok: false as const, 
+    status: 403, 
+    error: "Solo los administradores pueden acceder a esta funcionalidad" 
+  };
+}

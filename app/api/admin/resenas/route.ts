@@ -28,20 +28,20 @@ export async function GET() {
         r.id,
         r.calificacion_resena,
         r.comentario,
-        r.fk_itinerario_servicio AS fk_itinerario,
+        r.fk_itinerario,
         c.nombre_1,
-        c.apellido_1,
         c.nombre_2,
+        c.apellido_1,
         c.apellido_2,
         c.c_i,
         i.fk_servicio,
         s.nombre AS nombre_servicio,
         v.id_venta
       FROM resena r
-      JOIN itinerario i ON i.id = r.fk_itinerario_servicio
-      JOIN servicio s ON s.id = i.fk_servicio
+      JOIN itinerario i ON i.id = r.fk_itinerario
       JOIN venta v ON v.id_venta = i.fk_venta
       JOIN cliente c ON c.id = v.fk_cliente
+      JOIN servicio s ON s.id = i.fk_servicio
       ORDER BY r.id DESC
       LIMIT 100
       `
@@ -50,7 +50,7 @@ export async function GET() {
     // Formatear nombre del cliente
     const reseñas = rows.map((r: any) => ({
       id: r.id,
-      calificacion_resena: r.calificacion_resena,
+      calificacion_resena: Number(r.calificacion_resena),
       comentario: r.comentario,
       fk_itinerario: r.fk_itinerario,
       nombre_cliente: `${r.nombre_1} ${r.nombre_2 || ""} ${r.apellido_1} ${r.apellido_2 || ""}`.trim(),
@@ -68,4 +68,3 @@ export async function GET() {
     );
   }
 }
-

@@ -615,6 +615,8 @@ values  (1, 'Retraso de Vuelo/Transporte'),
         (9, 'Fallo en el Reembolso'),
         (10, 'Problemas con Millas/Puntos');
 
+SELECT * from insertar_usuario('admin@test.com','123',3,null,null);
+
 SELECT *
 FROM insertar_proveedor('laser@mail.com', 'pwd123', 'Laser Airlines', ARRAY[5511987654321, 5511234567890], '2005-10-15', 1, 'aereo');
 
@@ -2904,7 +2906,6 @@ FROM insertar_paquete(
         'Escapada Romántica Cienfueguera',
         'Un viaje pensado para parejas, incluye vuelo, alojamiento de lujo, un paseo guiado por la ciudad y una cena romántica.',
         'Romántico',
-        ARRAY['Mínimo 2 personas', 'No aplica en temporada alta']::CHARACTER VARYING[],
         ARRAY[1, 2, 3, 8]::INTEGER[]
      );
 
@@ -2915,7 +2916,6 @@ FROM insertar_paquete(
         'Aventura Andina Extrema',
         'Perfecto para amantes de la adrenalina. Incluye vuelos, traslados privados, actividad de aventura (ej. paracaidismo) y seguro completo.',
         'Aventura',
-        ARRAY['Certificado médico requerido', 'Edad mínima 18 años']::CHARACTER VARYING[],
         ARRAY[1, 4, 7, 10]::INTEGER[]
      );
 
@@ -2926,7 +2926,6 @@ FROM insertar_paquete(
         'Luna de Miel Caribeña VIP',
         'Paquete de lujo con vuelo internacional y todos los servicios premium en un destino de playa exclusivo.',
         'Lujo',
-        ARRAY['Requiere pasaporte vigente', 'Tarifa sujeta a disponibilidad aérea']::CHARACTER VARYING[],
         ARRAY[9, 2, 4, 8, 10]::INTEGER[]
      );
 
@@ -2937,7 +2936,6 @@ FROM insertar_paquete(
         'Ruta del Cacao y Café',
         'Experiencia inmersiva en la cultura y sabores locales. Incluye vuelos, alojamiento y un tour temático gastronómico.',
         'Gastronómico',
-        ARRAY['Notificar alergias alimentarias']::CHARACTER VARYING[],
         ARRAY[1, 2, 3]::INTEGER[]
      );
 
@@ -2948,7 +2946,6 @@ FROM insertar_paquete(
         'Fin de Semana Low Cost',
         'La opción más económica. Incluye lo esencial: vuelo, hotel estándar y seguro básico.',
         'Económico',
-        ARRAY['Equipaje de mano únicamente', 'Hotel 3 estrellas']::CHARACTER VARYING[],
         ARRAY[1, 2, 5]::INTEGER[]
      );
 
@@ -2959,7 +2956,6 @@ FROM insertar_paquete(
         'Road Trip Llanero',
         'Para explorar por tierra. Incluye alquiler de vehículo 4x4, alojamiento en posadas y seguro de viaje básico.',
         'Terrestre',
-        ARRAY['Licencia de conducir vigente', 'Depósito de garantía por el vehículo']::CHARACTER VARYING[],
         ARRAY[6, 2, 5]::INTEGER[]
      );
 
@@ -2970,7 +2966,6 @@ FROM insertar_paquete(
         'Inmersión Cultural Urbana',
         'Descubre el corazón de una metrópolis. Vuelo, hotel céntrico, tour cultural y traslados cómodos.',
         'Cultural',
-        ARRAY['Se recomienda calzado cómodo']::CHARACTER VARYING[],
         ARRAY[1, 2, 3, 4]::INTEGER[]
      );
 
@@ -2981,7 +2976,6 @@ FROM insertar_paquete(
         'Safari Amazónico Fotográfico',
         'Experiencia de contacto con la naturaleza. Incluye vuelo, alojamiento tipo cabaña y actividades ecológicas/aventura.',
         'Ecológico',
-        ARRAY['Vacuna contra la fiebre amarilla', 'No apto para menores de 12 años']::CHARACTER VARYING[],
         ARRAY[1, 2, 7]::INTEGER[]
      );
 
@@ -2992,7 +2986,6 @@ FROM insertar_paquete(
         'Negocios Express + Seguro',
         'Enfocado en viajeros de negocios. Rapidez y cobertura. Vuelo, hotel cerca del centro de negocios y traslados ejecutivos.',
         'Ejecutivo',
-        ARRAY['Sólo en días laborables']::CHARACTER VARYING[],
         ARRAY[1, 2, 4, 5]::INTEGER[]
      );
 
@@ -3003,7 +2996,6 @@ FROM insertar_paquete(
         'Vuelta al Mundo (Servicios Totales)',
         'El paquete más completo. Incluye una muestra de cada servicio: desde vuelos nacionales e internacionales, hasta cenas y seguros premium.',
         'Global',
-        ARRAY['Mínimo 30 días de viaje', 'Requiere planificación anticipada']::CHARACTER VARYING[],
         ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]::INTEGER[]
      );
 
@@ -3283,41 +3275,60 @@ values  (1, 'cliente', '2025-12-14 02:03:44.360124', 'Creación de Cliente Juan 
         (9, 'venta', '2025-12-14 02:03:45.451993', 'Estado de Venta 4 a Pagado', 4, 10),
         (10, 'reembolso', '2025-12-14 02:03:45.591017', 'Procesamiento Reembolso Venta 2', 1, 10);
 
-insert into public.plan_cuotas (id_plan_cuotas, tasa_interes, fk_venta)
-values  (1, 10, 1),
-        (2, 5, 3),
-        (3, 8, 5),
-        (4, 12, 7),
-        (5, 15, 9),
-        (6, 10, 2),
-        (7, 5, 4),
-        (8, 8, 6),
-        (9, 12, 8),
-        (10, 15, 10);
+-- Nuevas ventas para pruebas de cuotas (Sin pagos registrados)
+SELECT * FROM iniciar_venta(1); -- Venta 11
+SELECT * FROM agregar_item_itinerario(11, 1, '2026-01-01'::DATE);
 
-insert into public.cuota (id_cuota, monto_cuota, fk_plan_cuotas)
-values  (1, 750, 1),
-        (3, 1500, 2),
-        (5, 600, 3),
-        (7, 2250, 4),
-        (9, 450, 5),
-        (2, 1150, 6),
-        (6, 675, 8),
-        (4, 500, 7),
-        (8, 3050, 9),
-        (10, 892, 10);
+SELECT * FROM iniciar_venta(2); -- Venta 12
+SELECT * FROM agregar_item_itinerario(12, 1, '2026-01-01'::DATE);
 
-insert into public.cuo_ecuo (fk_cuota, fk_estado, fecha_inicio, fecha_fin)
-values  (1, 1, '2026-01-01', '2026-02-01'),
-        (1, 2, '2026-02-01', null),
-        (2, 1, '2026-02-01', '2026-03-01'),
-        (2, 4, '2026-03-01', null),
-        (3, 7, '2026-01-15', null),
-        (4, 6, '2026-02-15', null),
-        (5, 4, '2026-03-05', null),
-        (6, 1, '2026-04-01', null),
-        (7, 5, '2026-05-10', null),
-        (8, 3, '2026-06-01', null);
+SELECT * FROM iniciar_venta(3); -- Venta 13
+SELECT * FROM agregar_item_itinerario(13, 1, '2026-01-01'::DATE);
+
+SELECT * FROM iniciar_venta(4); -- Venta 14
+SELECT * FROM agregar_item_itinerario(14, 1, '2026-01-01'::DATE);
+
+SELECT * FROM iniciar_venta(5); -- Venta 15
+SELECT * FROM agregar_item_itinerario(15, 1, '2026-01-01'::DATE);
+
+SELECT * FROM iniciar_venta(6); -- Venta 16
+SELECT * FROM agregar_item_itinerario(16, 1, '2026-01-01'::DATE);
+
+SELECT * FROM iniciar_venta(7); -- Venta 17
+SELECT * FROM agregar_item_itinerario(17, 1, '2026-01-01'::DATE);
+
+SELECT * FROM iniciar_venta(8); -- Venta 18
+SELECT * FROM agregar_item_itinerario(18, 1, '2026-01-01'::DATE);
+
+SELECT * FROM iniciar_venta(9); -- Venta 19
+SELECT * FROM agregar_item_itinerario(19, 1, '2026-01-01'::DATE);
+
+SELECT * FROM iniciar_venta(10); -- Venta 20
+SELECT * FROM agregar_item_itinerario(20, 1, '2026-01-01'::DATE);
+
+-- Estructura: agregar_cuotas(id_venta, tasa_interes, num_cuotas)
+SELECT * FROM agregar_cuotas(11,10, 5);
+SELECT * FROM agregar_cuotas(12,8, 3);
+SELECT * FROM agregar_cuotas(13, 12, 12);
+SELECT * FROM agregar_cuotas(14,5, 2);
+SELECT * FROM agregar_cuotas(15,15, 10);
+SELECT * FROM agregar_cuotas(16,10, 4);
+SELECT * FROM agregar_cuotas(17,7, 6);
+SELECT * FROM agregar_cuotas(18,10, 10);
+SELECT * FROM agregar_cuotas(19,10, 12);
+SELECT * FROM agregar_cuotas(20,5, 9);
+
+-- Estructura: pagar_cuota(id_cuota, monto, fk_metodo_pago, denominacion)
+SELECT * FROM pagar_cuota(1, 25700, 1, 'USD');
+SELECT * FROM pagar_cuota(2, 25700, 2, 'USD');
+SELECT * FROM pagar_cuota(3, 25700, 3, 'USD');
+SELECT * FROM pagar_cuota(4, 25700, 4, 'USD');
+SELECT * FROM pagar_cuota(5, 25700, 5, 'USD');
+SELECT * FROM pagar_cuota(6, 35883, 6, 'USD');
+SELECT * FROM pagar_cuota(7, 35883, 7, 'USD');
+SELECT * FROM pagar_cuota(8, 35883, 8, 'USD');
+SELECT * FROM pagar_cuota(9, 8358, 9, 'USD');
+SELECT * FROM pagar_cuota(10, 8358, 10, 'USD');
 
 insert into public.c_pre (fk_cliente, fk_preferencia)
 values  (1, 8),
@@ -3344,53 +3355,98 @@ values  (1, 40.00, '2025-12-15', 20),
         (10, 30.00, '2026-07-01', 9),
         (11, 10.00, '2026-01-15', 10);
 
-insert into public.lista_deseo (fk_cliente, fk_lugar, fk_servicio)
-values  (1, 10, null),
-        (2, null, 1),
-        (3, 1, null),
-        (4, null, 5),
-        (5, 2, null),
-        (6, null, 3),
-        (7, 3, null),
-        (8, null, 9),
-        (9, 4, null),
-        (10, null, 10);
+-- ============================================================
+-- LISTA DESEOS
+-- ============================================================
 
-insert into public.reclamo (id, comentario, fk_cliente, fk_tipo_reclamo, fk_itinerario)
-values  (1, 'El vuelo se retrasó 4 horas sin explicación.', 1, 1, 1),
-        (2, 'La suite no era la prometida, mucho más pequeña.', 3, 2, 3),
-        (3, 'Me cobraron de más por el tour del río.', 7, 3, 9),
-        (4, 'La actividad de surf fue cancelada a último momento.', 10, 4, 10),
-        (5, 'La comida del restaurante era de mala calidad.', 2, 5, 7),
-        (6, 'El boleto aéreo tenía el nombre mal escrito.', 4, 6, 2),
-        (7, 'El personal de la agencia fue grosero al teléfono.', 5, 7, 5),
-        (8, 'El vehículo alquilado no correspondía con la reserva.', 6, 8, 6),
-        (9, 'No se ha procesado mi reembolso por el tour.', 8, 9, 8),
-        (10, 'Las millas otorgadas por el vuelo son incorrectas.', 9, 10, 4);
+-- 1. El Cliente 1 (Luis Silva) desea visitar Japón (Lugar ID 9)
+SELECT * FROM listar_deseos(1, 9, NULL);
 
-insert into public.rec_est (fecha_inicio, fecha_final, fk_estado, fk_reclamo)
-values  ('2025-12-10', '2025-12-11', 8, 1),
-        ('2025-12-11', null, 7, 1),
-        ('2025-12-12', null, 1, 2),
-        ('2025-12-13', null, 8, 3),
-        ('2025-12-14', null, 5, 3),
-        ('2025-12-15', null, 9, 4),
-        ('2025-12-16', null, 7, 5),
-        ('2025-12-17', null, 1, 6),
-        ('2025-12-18', null, 7, 7),
-        ('2025-12-19', null, 9, 8);
+-- 2. El Cliente 2 (Ana Gomez) desea visitar España (Lugar ID 2)
+SELECT * FROM listar_deseos(2, 2, NULL);
 
-insert into public.reembolso (id_reembolso, monto_reembolso, fk_venta)
-values  (1, 50, 2),
-        (2, 100, 4),
-        (3, 20, 6),
-        (4, 10, 8),
-        (5, 0, 10),
-        (6, 50, 1),
-        (7, 100, 3),
-        (8, 20, 5),
-        (9, 10, 7),
-        (10, 0, 9);
+-- 3. El Cliente 4 (Paula Marquez) desea viajar a Francia (Lugar ID 7)
+SELECT * FROM listar_deseos(4, 7, NULL);
+
+-- 4. El Cliente 6 (Juan Perez) desea ir a Estados Unidos (Lugar ID 3)
+SELECT * FROM listar_deseos(6, 3, NULL);
+
+-- 5. El Cliente 8 (Laura Torres) desea conocer Brasil (Lugar ID 10)
+SELECT * FROM listar_deseos(8, 10, NULL);
+
+-- 6. El Cliente 3 (Juan Pablo Leon) está interesado en el Servicio ID 1
+SELECT * FROM listar_deseos(3, NULL, 1);
+
+-- 7. El Cliente 5 (Carlos Ruiz) desea el Servicio ID 5
+SELECT * FROM listar_deseos(5, NULL, 5);
+
+-- 8. El Cliente 7 (Maria Garcia) tiene en su lista el Servicio ID 8
+SELECT * FROM listar_deseos(7, NULL, 8);
+
+-- 9. El Cliente 9 (Ricardo Pinto) desea el Servicio ID 10
+SELECT * FROM listar_deseos(9, NULL, 10);
+
+-- 10. El Cliente 10 (Isabel Salazar) desea el Servicio ID 2
+SELECT * FROM listar_deseos(10, NULL, 2);
+
+
+-- Formato: SELECT * FROM agregar_reclamo(comentario, id_cliente, id_tipo_reclamo, id_itinerario)
+SELECT * FROM agregar_reclamo('Perdí mi maleta en el trayecto.', 1, 1, 1);
+SELECT * FROM agregar_reclamo('La habitación no tenía calefacción.', 2, 3, 2);
+SELECT * FROM agregar_reclamo('Cobro doble detectado en la cuenta de Juan Pablo.', 3, 2, 3);
+SELECT * FROM agregar_reclamo('Paula Marquez reporta que el guía no llegó.', 4, 3, 4);
+SELECT * FROM agregar_reclamo('Hubo problemas con el seguro médico.', 5, 2, 5);
+SELECT * FROM agregar_reclamo('Retraso de 6 horas sin comida.', 6, 1, 6);
+SELECT * FROM agregar_reclamo('Maria Garcia no recibió el kit de bienvenida.', 7, 3, 7);
+SELECT * FROM agregar_reclamo('Reclamo error en el nombre del ticket.', 8, 2, 8);
+SELECT * FROM agregar_reclamo('El hotel estaba lleno.', 9, 3, 9);
+SELECT * FROM agregar_reclamo('Isabel Salazar reclama falta de transporte privado.', 10, 1, 10);
+
+-- SELECT * FROM cambiar_estado_reclamo(id_reclamo, id_estado)
+SELECT * FROM cambiar_estado_reclamo(1, 9);  -- Reclamo 1 -> En Proceso
+SELECT * FROM cambiar_estado_reclamo(2, 9);  -- Reclamo 2 -> En Proceso
+SELECT * FROM cambiar_estado_reclamo(3, 10); -- Reclamo 3 -> Resuelto
+SELECT * FROM cambiar_estado_reclamo(4, 9);  -- Reclamo 4 -> En Proceso
+SELECT * FROM cambiar_estado_reclamo(5, 10); -- Reclamo 5 -> Resuelto
+SELECT * FROM cambiar_estado_reclamo(6, 9);  -- Reclamo 6 -> En Proceso
+SELECT * FROM cambiar_estado_reclamo(7, 10); -- Reclamo 7 -> Resuelto
+SELECT * FROM cambiar_estado_reclamo(8, 9);  -- Reclamo 8 -> En Proceso
+SELECT * FROM cambiar_estado_reclamo(9, 10); -- Reclamo 9 -> Resuelto
+SELECT * FROM cambiar_estado_reclamo(10, 9); -- Reclamo 10 -> En Proceso
+
+-- ============================================================
+-- EJECUCIÓN DE REEMBOLSOS (PROCEDIMIENTOS)
+-- ============================================================
+
+-- 1. Reembolso total de la Venta 1 (Cliente: Luis Silva)
+CALL realizar_reembolso(1);
+
+-- 2. Reembolso total de la Venta 2 (Cliente: Ana Gomez)
+CALL realizar_reembolso(2);
+
+-- 3. Reembolso total de la Venta 3 (Cliente: Juan Pablo Leon)
+CALL realizar_reembolso(3);
+
+-- 4. Reembolso total de la Venta 4 (Cliente: Paula Marquez)
+CALL realizar_reembolso(4);
+
+-- 5. Reembolso total de la Venta 5 (Cliente: Carlos Ruiz)
+CALL realizar_reembolso(5);
+
+-- 6. Reembolso total de la Venta 6 (Cliente: Juan Perez)
+CALL realizar_reembolso(6);
+
+-- 7. Reembolso total de la Venta 7 (Cliente: Maria Garcia)
+CALL realizar_reembolso(7);
+
+-- 8. Reembolso total de la Venta 8 (Cliente: Laura Torres)
+CALL realizar_reembolso(8);
+
+-- 9. Reembolso total de la Venta 9 (Cliente: Ricardo Pinto)
+CALL realizar_reembolso(9);
+
+-- 10. Reembolso total de la Venta 10 (Cliente: Isabel Salazar)
+CALL realizar_reembolso(10);
 
 insert into public.ambiente (nombre)
 values  ('Familiar'),
@@ -3410,22 +3466,100 @@ values  (11, 2),
         (13, 1),
         (14, 4),
         (15, 3),
-        (1, 6),
+        (6, 6),
         (9, 8),
         (5, 7),
         (3, 10),
         (2, 9);
 
-insert into public.resena (calificacion_resena, comentario, fk_itinerario_servicio)
-values  (4.5, 'El servicio fue excelente, muy puntuales y amables.', 1),
-        (3.0, 'El hotel estaba bien, pero la comida no fue de mi agrado.', 2),
-        (5.0, '¡Una experiencia inolvidable! El guía fue fantástico.', 3),
-        (2.5, 'El vehículo alquilado tenía problemas mecánicos.', 4),
-        (4.8, 'La cena romántica superó nuestras expectativas. Totalmente recomendado.', 5),
-        (4.2, 'El vuelo de regreso tuvo un pequeño retraso, pero el personal fue muy atento.', 6),
-        (3.5, 'La habitación del hotel era más pequeña de lo esperado, pero estaba limpia.', 7),
-        (5.0, 'El tour por la ciudad fue increíble, el guía sabía mucho de historia.', 8),
-        (2.0, 'El coche de alquiler no estaba limpio y olía a tabaco.', 9),
-        (4.9, 'La comida en el restaurante fue excepcional, una de las mejores que he probado.', 10);
+-- Formato: SELECT * FROM agregar_resena(id_itinerario, calificacion, comentario)
+SELECT * FROM agregar_resena(1, 5.0, 'El vuelo fue sumamente puntual.');
+SELECT * FROM agregar_resena(2, 4.5, 'Excelente atención en el hotel.');
+SELECT * FROM agregar_resena(3, 3.0, 'El transporte tuvo algunos retrasos.');
+SELECT * FROM agregar_resena(4, 5.0, 'La cena en el restaurante fue increíble.');
+SELECT * FROM agregar_resena(5, 4.0, 'Guía turístico muy conocedor en el tour de Venezuela.');
+SELECT * FROM agregar_resena(6, 2.5, 'El serviciofue un poco tosco al principio.');
+SELECT * FROM agregar_resena(7, 4.8, 'Gran experiencia, vistas hermosas.');
+SELECT * FROM agregar_resena(8, 3.5, 'El proveedor ofreció un buen paquete, pero el hotel era pequeño.');
+SELECT * FROM agregar_resena(9, 5.0, 'Todo perfecto con el servicio.');
+SELECT * FROM agregar_resena(10, 4.2, 'Se gestionó muy bien el itinerario internacional.');
 
-SELECT * from insertar_usuario('admin@test.com','123',3,0,0);
+-- ============================================================
+-- GESTIÓN DE RESTRICCIONES DE PAQUETE (PROCEDIMIENTOS)
+-- ============================================================
+
+-- 1. Administrador (ID 1) pone restricción de edad al Paquete 1
+CALL gestionar_restriccion_paquete(1, 1, 'edad', '>', '18');
+
+-- 2. Administrador (ID 1) pone restricción de estado civil al Paquete 2
+CALL gestionar_restriccion_paquete(1, 2, 'estado_civil', '=', 'soltero');
+
+-- 3. Proveedor (ID 2) pone restricción de edad mínima al Paquete 3
+-- (Asumiendo que el Proveedor 2 tiene servicios en el Paquete 3)
+CALL gestionar_restriccion_paquete(2, 3, 'edad', '>=', '12');
+
+-- 4. Administrador (ID 1) pone restricción informativa de nacionalidad al Paquete 4
+-- (Recuerda que esta el sistema la ignora en la validación automática pero la guarda)
+CALL gestionar_restriccion_paquete(1, 4, 'edad', '>=', '21');
+
+-- 5. Proveedor (ID 3) restringe el Paquete 5 a mayores de edad
+CALL gestionar_restriccion_paquete(3, 5, 'edad', '>', '40');
+
+-- 6. Administrador (ID 1) requiere que el cliente NO sea divorciado para el Paquete 6
+CALL gestionar_restriccion_paquete(1, 6, 'estado_civil', '!=', 'divorciado');
+
+-- 7. Administrador (ID 1) pone restricción informativa de visa para el Paquete 7
+CALL gestionar_restriccion_paquete(1, 7, 'estado_civil', '=', 'casado');
+
+-- 8. Proveedor (ID 2) pone restricción de edad máxima para un paquete infantil (Paquete 8)
+CALL gestionar_restriccion_paquete(2, 8, 'edad', '<', '75');
+
+-- 9. Administrador (ID 1) pone restricción de estado civil para Paquete 9 (Parejas)
+CALL gestionar_restriccion_paquete(1, 9, 'estado_civil', '!=', 'casado');
+
+-- 10. Administrador (ID 1) pone restricción informativa de vacuna para el Paquete 10
+CALL gestionar_restriccion_paquete(1, 10, 'estado_civil', '=', 'viudo');
+
+-- ============================================================
+-- PRUEBAS DE VALIDACIÓN DE RESTRICCIONES (FUNCIONES)
+-- ============================================================
+
+-- 1. Luis Silva (ID 1, adulto) intenta comprar Paquete 1 (Edad > 18)
+-- Resultado esperado: true
+SELECT * FROM cliente_cumple_restricciones(1, 1);
+
+-- 2. Ana Gomez (ID 2, soltera) intenta comprar Paquete 2 (Estado Civil = 'soltero')
+-- Resultado esperado: true
+SELECT * FROM cliente_cumple_restricciones(2, 2);
+
+-- 3. Juan Pablo (ID 3, adulto) intenta comprar Paquete 5 (Edad > 21)
+-- Resultado esperado: true
+SELECT * FROM cliente_cumple_restricciones(3, 5);
+
+-- 4. Ricardo Pinto (ID 9, casado) intenta comprar Paquete 9 (Estado Civil = 'casado')
+-- Resultado esperado: true
+SELECT * FROM cliente_cumple_restricciones(9, 9);
+
+-- 5. Isabel Salazar (ID 10) intenta comprar Paquete 10 (Restricción informativa 'vacuna')
+-- Resultado esperado: true (Lanza un NOTICE informativo, pero no bloquea)
+SELECT * FROM cliente_cumple_restricciones(10, 10);
+
+-- 6. CASO DE ERROR: Juan Perez (ID 6, adulto) intenta comprar Paquete 8 (Edad < 12)
+-- Resultado esperado: EXCEPTION 'Bloqueado: El cliente tiene X años y se requiere < 12'
+SELECT * FROM cliente_cumple_restricciones(6, 8);
+
+-- 7. CASO DE ERROR: Cliente soltero intenta comprar Paquete 9 (Solo para casados)
+-- Resultado esperado: EXCEPTION 'Bloqueado: El paquete es solo para personas casado'
+SELECT * FROM cliente_cumple_restricciones(1, 9);
+
+-- 8. Paula Marquez (ID 4) intenta comprar Paquete 4 (Nacionalidad = 'venezolana')
+-- Resultado esperado: true (Lanza NOTICE, ya que nacionalidad no es validación automática)
+SELECT * FROM cliente_cumple_restricciones(4, 4);
+
+-- 9. Maria Garcia (ID 7) intenta comprar Paquete 1 (Edad > 18)
+-- Resultado esperado: true
+SELECT * FROM cliente_cumple_restricciones(7, 1);
+
+-- 10. Carlos Ruiz (ID 5) intenta comprar Paquete 6 (Estado Civil != 'divorciado')
+-- Resultado esperado: true (Asumiendo que Carlos es soltero o casado)
+SELECT * FROM cliente_cumple_restricciones(5, 6);

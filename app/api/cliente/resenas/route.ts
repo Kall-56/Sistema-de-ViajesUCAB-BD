@@ -127,12 +127,12 @@ export async function GET() {
         r.id,
         r.calificacion_resena,
         r.comentario,
-        r.fk_itinerario_servicio AS fk_itinerario,
+        r.fk_itinerario,
         i.fk_servicio,
         s.nombre AS nombre_servicio,
         i.fecha_hora_inicio
       FROM resena r
-      JOIN itinerario i ON i.id = r.fk_itinerario_servicio
+      JOIN itinerario i ON i.id = r.fk_itinerario
       JOIN servicio s ON s.id = i.fk_servicio
       JOIN venta v ON v.id_venta = i.fk_venta
       WHERE v.fk_cliente = $1

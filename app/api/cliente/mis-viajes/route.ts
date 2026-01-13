@@ -71,7 +71,32 @@ export async function GET() {
         )
         FROM pago p
         JOIN metodo_pago mp ON p.fk_metodo_pago = mp.id_metodo_pago
-        WHERE p.fk_venta = v.id_venta) AS pagos
+        WHERE p.fk_venta = v.id_venta) AS pagos,
+        (SELECT json_build_object(
+          'id_plan_cuotas', pc.id_plan_cuotas,
+          'tasa_interes', pc.tasa_interes,
+          'total_cuotas', (SELECT COUNT(*) FROM cuota c WHERE c.fk_plan_cuotas = pc.id_plan_cuotas),
+          'cuotas_pagadas', (SELECT COUNT(*) 
+                             FROM cuota c 
+                             JOIN cuo_ecuo ce ON ce.fk_cuota = c.id_cuota
+                             JOIN estado e ON e.id = ce.fk_estado
+                             WHERE c.fk_plan_cuotas = pc.id_plan_cuotas
+                               AND e.nombre = 'Pagado'
+                               AND ce.fecha_fin IS NULL),
+          'monto_total_financiado', (SELECT COALESCE(SUM(c.monto_cuota), 0)
+                                      FROM cuota c
+                                      WHERE c.fk_plan_cuotas = pc.id_plan_cuotas),
+          'saldo_pendiente', (SELECT COALESCE(SUM(c.monto_cuota), 0)
+                               FROM cuota c
+                               JOIN cuo_ecuo ce ON ce.fk_cuota = c.id_cuota
+                               JOIN estado e ON e.id = ce.fk_estado
+                               WHERE c.fk_plan_cuotas = pc.id_plan_cuotas
+                                 AND e.nombre = 'pendiente'
+                                 AND ce.fecha_fin IS NULL)
+        )
+        FROM plan_cuotas pc
+        WHERE pc.fk_venta = v.id_venta
+        LIMIT 1) AS plan_cuotas
       FROM venta v
       JOIN ven_est ve ON ve.fk_venta = v.id_venta
       JOIN estado e ON e.id = ve.fk_estado

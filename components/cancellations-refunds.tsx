@@ -131,16 +131,17 @@ export function CancellationsRefunds() {
       const data = await r.json()
 
       if (r.ok) {
-        toast.success("Reembolso solicitado", {
-          description: "Tu solicitud de reembolso ha sido procesada exitosamente",
+        toast.success("Reembolso procesado", {
+          description: "Tu reembolso ha sido procesado exitosamente. El monto será reembolsado a tu método de pago original.",
         })
         setSelectedReservation("")
         setCancellationReason("")
+        setMontoCalculado(null)
         // Recargar datos
         await loadVentasPagadas()
         await loadReembolsos()
       } else {
-        throw new Error(data?.error ?? "Error solicitando reembolso")
+        throw new Error(data?.error ?? "Error procesando reembolso")
       }
     } catch (err: any) {
       console.error("Error solicitando reembolso:", err)
@@ -153,11 +154,57 @@ export function CancellationsRefunds() {
   }
 
   const selectedVenta = ventasPagadas.find((v) => v.id_venta.toString() === selectedReservation)
-  
-  // Calcular penalización y monto a reembolsar (10% penalización según política mostrada)
-  const montoOriginal = selectedVenta?.monto_total || 0
-  const penalizacion = montoOriginal * 0.1
-  const montoReembolso = montoOriginal * 0.9
+  const [montoCalculado, setMontoCalculado] = useState<{
+    monto_original: number
+    monto_reembolso: number
+    penalizacion: number
+    puede_reembolsar: boolean
+  } | null>(null)
+  const [calculandoMonto, setCalculandoMonto] = useState(false)
+
+  useEffect(() => {
+    async function calcularMontoReembolso() {
+      if (!selectedReservation) {
+        setMontoCalculado(null)
+        return
+      }
+
+      setCalculandoMonto(true)
+      try {
+        const r = await fetch(`/api/cliente/reembolsos/calcular?id_venta=${selectedReservation}`, {
+          cache: "no-store"
+        })
+        const data = await r.json()
+
+        if (r.ok) {
+          setMontoCalculado({
+            monto_original: data.monto_original,
+            monto_reembolso: data.monto_reembolso,
+            penalizacion: data.penalizacion || 0,
+            puede_reembolsar: data.puede_reembolsar
+          })
+        } else {
+          setMontoCalculado(null)
+          if (data.error && !data.error.includes("Solo se pueden reembolsar")) {
+            toast.error("Error", {
+              description: data.error
+            })
+          }
+        }
+      } catch (err: any) {
+        console.error("Error calculando monto de reembolso:", err)
+        setMontoCalculado(null)
+      } finally {
+        setCalculandoMonto(false)
+      }
+    }
+
+    calcularMontoReembolso()
+  }, [selectedReservation])
+
+  const montoOriginal = montoCalculado?.monto_original || selectedVenta?.monto_total || 0
+  const penalizacion = montoCalculado?.penalizacion || 0
+  const montoReembolso = montoCalculado?.monto_reembolso || montoOriginal
 
   // Formatear fecha
   const formatFecha = (fechaStr: string | null) => {
@@ -247,23 +294,41 @@ export function CancellationsRefunds() {
                     Bs. {montoOriginal.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
-                <div className="border-t pt-3 space-y-2">
-                  <div className="flex justify-between text-amber-600">
-                    <span className="text-sm flex items-center gap-1">
-                      <AlertTriangle className="h-4 w-4" />
-                      Penalización (10%)
-                    </span>
-                    <span className="font-semibold">
-                      -Bs. {penalizacion.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                {calculandoMonto ? (
+                  <div className="border-t pt-3 flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-[#E91E63] mr-2" />
+                    <span className="text-sm text-muted-foreground">Calculando monto de reembolso...</span>
                   </div>
-                  <div className="flex justify-between text-lg">
-                    <span className="font-bold">Monto a Reembolsar (90%)</span>
-                    <span className="font-bold text-[#E91E63]">
-                      Bs. {montoReembolso.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                ) : montoCalculado && montoCalculado.puede_reembolsar ? (
+                  <div className="border-t pt-3 space-y-2">
+                    {penalizacion > 0 && (
+                      <div className="flex justify-between text-amber-600">
+                        <span className="text-sm flex items-center gap-1">
+                          <AlertTriangle className="h-4 w-4" />
+                          Penalización
+                        </span>
+                        <span className="font-semibold">
+                          -Bs. {penalizacion.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-lg">
+                      <span className="font-bold">Monto a Reembolsar</span>
+                      <span className="font-bold text-[#E91E63]">
+                        Bs. {montoReembolso.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                ) : montoCalculado && !montoCalculado.puede_reembolsar ? (
+                  <div className="border-t pt-3">
+                    <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm text-red-800 dark:text-red-200">
+                        <AlertTriangle className="h-4 w-4 inline mr-2" />
+                        Esta venta no puede ser reembolsada en este momento.
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="space-y-2">
@@ -280,8 +345,8 @@ export function CancellationsRefunds() {
               <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-lg p-4">
                 <p className="text-sm text-amber-800 dark:text-amber-200">
                   <AlertTriangle className="h-4 w-4 inline mr-2" />
-                  <strong>Política de Cancelación:</strong> Se aplicará una penalización del 10% sobre el monto total.
-                  El reembolso se procesará según la política de la empresa y se reflejará en tu método de pago original.
+                  <strong>Política de Cancelación:</strong> El monto de reembolso se calcula automáticamente según las políticas de la empresa.
+                  El reembolso se procesará y se reflejará en tu método de pago original.
                 </p>
               </div>
 
@@ -289,17 +354,22 @@ export function CancellationsRefunds() {
                 className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90" 
                 size="lg"
                 onClick={handleSolicitarReembolso}
-                disabled={solicitando}
+                disabled={solicitando || !montoCalculado?.puede_reembolsar || calculandoMonto}
               >
                 {solicitando ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Procesando...
+                    Procesando Reembolso...
+                  </>
+                ) : !montoCalculado?.puede_reembolsar ? (
+                  <>
+                    <XCircle className="h-4 w-4 mr-2" />
+                    No Disponible
                   </>
                 ) : (
                   <>
                     <XCircle className="h-4 w-4 mr-2" />
-                    Confirmar Cancelación
+                    Confirmar Reembolso
                   </>
                 )}
               </Button>

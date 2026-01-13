@@ -26,16 +26,16 @@ export async function GET(
         r.id,
         r.calificacion_resena,
         r.comentario,
-        r.fk_itinerario_servicio AS fk_itinerario,
+        r.fk_itinerario,
         c.nombre_1,
         c.apellido_1,
         c.nombre_2,
         c.apellido_2
       FROM resena r
-      JOIN itinerario i ON i.id = r.fk_itinerario_servicio
+      JOIN itinerario i ON i.id = r.fk_itinerario
       JOIN venta v ON v.id_venta = i.fk_venta
       JOIN cliente c ON c.id = v.fk_cliente
-      WHERE r.fk_itinerario_servicio = $1
+      WHERE r.fk_itinerario = $1
       ORDER BY r.id DESC
       `,
       [idItinerario]

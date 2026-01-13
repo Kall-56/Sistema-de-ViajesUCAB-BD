@@ -246,12 +246,12 @@ export async function POST(req: Request) {
         if (planCuotas && planCuotas.num_cuotas > 1) {
           // Plan de cuotas: crear plan y pagar primera cuota
           try {
-            // Crear plan de cuotas
-            await pool.query(
-              `SELECT agregar_cuotas($1, $2, $3, $4) AS resultado`,
+            // Crear plan de cuotas usando función agregar_cuotas
+            // Firma: agregar_cuotas(i_id_venta, i_tasa_interes, num_cuotas)
+            const { rows: cuotasRows } = await pool.query(
+              `SELECT agregar_cuotas($1, $2, $3) AS resultado`,
               [
                 id_venta,
-                venta.monto_total,
                 planCuotas.tasa_interes,
                 planCuotas.num_cuotas,
               ]
@@ -282,9 +282,10 @@ export async function POST(req: Request) {
             const primeraCuota = primeraCuotaRows[0];
             const montoCuota = Number(primeraCuota.monto_cuota);
 
-            // Pagar la primera cuota
+            // Pagar la primera cuota usando función pagar_cuota
+            // Firma: pagar_cuota(i_id_cuota, monto, i_fk_metodo_pago, i_denominacion)
             const { rows: pagarCuotaRows } = await pool.query(
-              `SELECT pagar_cuota($1, $2, $3, $4) AS id_pago`,
+              `SELECT pagar_cuota($1, $2, $3, $4) AS resultado`,
               [
                 primeraCuota.id_cuota,
                 montoCuota,
@@ -293,7 +294,26 @@ export async function POST(req: Request) {
               ]
             );
 
-            id_pago = pagarCuotaRows[0]?.id_pago;
+            const resultadoPago = pagarCuotaRows[0]?.resultado;
+            
+            if (!resultadoPago || resultadoPago !== 1) {
+              throw new Error("Error pagando primera cuota");
+            }
+
+            // Obtener el ID del pago creado por registrar_pago dentro de pagar_cuota
+            const { rows: pagoRows } = await pool.query(
+              `
+              SELECT id_pago 
+              FROM pago 
+              WHERE fk_venta = $1 
+                AND fecha_hora >= CURRENT_TIMESTAMP - INTERVAL '1 minute'
+              ORDER BY id_pago DESC 
+              LIMIT 1
+              `,
+              [id_venta]
+            );
+
+            id_pago = pagoRows[0]?.id_pago;
 
             if (!id_pago) {
               resultados.push({

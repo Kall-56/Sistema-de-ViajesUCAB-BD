@@ -36,6 +36,7 @@ import { ExchangeRateManagement } from "@/components/exchange-rate-management"
 import { MarketingCampaigns } from "@/components/marketing-campaigns"
 import { PackagesManagement } from "@/components/packages-management"
 import { ServicesManagement } from "@/components/services-management"
+import { RestriccionesManagement } from "@/components/restricciones-management"
 import { RestaurantsManagement } from "@/components/restaurants-management"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SustainabilityManagement } from "@/components/sustainability-management"
@@ -190,6 +191,15 @@ export function AdminDashboard() {
                   >
                     <Package className="h-4 w-4" />
                     Paquetes Turísticos
+                  </Button>
+
+                  <Button
+                    variant={activeTab === "restricciones" ? "secondary" : "ghost"}
+                    className="w-full justify-start gap-3"
+                    onClick={() => setActiveTab("restricciones")}
+                  >
+                    <AlertCircle className="h-4 w-4" />
+                    Restricciones
                   </Button>
 
                   <Button
@@ -590,6 +600,7 @@ export function AdminDashboard() {
 
             {/* Packages and Services CRUD modules */}
             {activeTab === "packages" && <PackagesManagement />}
+            {activeTab === "restricciones" && <RestriccionesManagement />}
             {activeTab === "services" && <ServicesManagement />}
             {activeTab === "itineraries" && <ItinerariesManagement />}
 

@@ -28,6 +28,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { CreditCard } from "lucide-react"
+import { CuotasCronograma } from "@/components/cuotas-cronograma"
 
 type ItinerarioItem = {
   id_itinerario: number
@@ -48,6 +50,15 @@ type Pago = {
   metodo_pago: string
 }
 
+type PlanCuotas = {
+  id_plan_cuotas: number
+  tasa_interes: number
+  total_cuotas: number
+  cuotas_pagadas: number
+  monto_total_financiado: number
+  saldo_pendiente: number
+}
+
 type Compra = {
   id_venta: number
   monto_total: number
@@ -59,6 +70,7 @@ type Compra = {
   fecha_estado: string
   items: ItinerarioItem[] | null
   pagos: Pago[] | null
+  plan_cuotas: PlanCuotas | null
 }
 
 export function MisViajesList() {
@@ -609,6 +621,37 @@ export function MisViajesList() {
                         </div>
                       ))}
                     </div>
+                  )}
+
+                  {/* Plan de cuotas */}
+                  {compra.plan_cuotas && (
+                    <>
+                      <Separator />
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold">Plan de Financiamiento</h4>
+                          <Badge variant="secondary">
+                            {compra.plan_cuotas.cuotas_pagadas} / {compra.plan_cuotas.total_cuotas} cuotas pagadas
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">Tasa de interés</p>
+                            <p className="font-semibold">{compra.plan_cuotas.tasa_interes}%</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Saldo pendiente</p>
+                            <p className="font-semibold text-[#E91E63]">
+                              Bs. {compra.plan_cuotas.saldo_pendiente.toLocaleString("es-VE", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                        <CuotasCronograma idVenta={compra.id_venta} />
+                      </div>
+                    </>
                   )}
 
                   <Separator />

@@ -78,11 +78,23 @@ export async function POST(req: Request) {
         `SELECT cliente_cumple_restricciones($1, $2) AS cumple`,
         [clienteId, id_paquete]
       );
-      // Si llegamos aquí, el cliente cumple las restricciones (la función lanza EXCEPTION si no cumple)
     } catch (validacionError: any) {
       // La función lanza EXCEPTION con mensaje descriptivo si no cumple
+      // Extraer mensaje claro del error
+      let mensajeError = "No cumple con las restricciones del paquete";
+      
+      if (validacionError.message) {
+        // La función retorna mensajes como "Bloqueado: El cliente tiene X años y se requiere > Y"
+        // o "Bloqueado: El paquete es solo para personas soltero"
+        if (validacionError.message.includes("Bloqueado:")) {
+          mensajeError = validacionError.message.replace("Bloqueado:", "").trim();
+        } else {
+          mensajeError = validacionError.message;
+        }
+      }
+      
       return NextResponse.json(
-        { error: validacionError.message ?? "No cumple con las restricciones del paquete" },
+        { error: mensajeError },
         { status: 400 }
       );
     }

@@ -28,3 +28,6 @@ next-env.d.ts
 
 # uploads
 /public/uploads/
+
+# database scripts (opcional - descomentar si no quieres versionar scripts SQL)
+# /scripts/*.sql

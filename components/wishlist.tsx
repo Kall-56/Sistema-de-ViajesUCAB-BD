@@ -32,6 +32,7 @@ export function Wishlist() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [removing, setRemoving] = useState(false)
+  const [addingToCart, setAddingToCart] = useState(false)
   const [deseos, setDeseos] = useState<WishlistItem | null>(null)
 
   useEffect(() => {
@@ -92,6 +93,63 @@ export function Wishlist() {
       })
     } finally {
       setRemoving(false)
+    }
+  }
+
+  async function handleAddToCart() {
+    if (!deseos?.fk_servicio || addingToCart) return
+
+    setAddingToCart(true)
+    try {
+      const ventaRes = await fetch("/api/cliente/ventas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+
+      if (!ventaRes.ok) {
+        const errorData = await ventaRes.json()
+        throw new Error(errorData.error || "Error creando venta")
+      }
+
+      const ventaData = await ventaRes.json()
+      const idVenta = ventaData.id_venta
+
+      if (!idVenta) {
+        throw new Error("No se recibió el ID de venta")
+      }
+
+      const fechaInicio = new Date()
+      fechaInicio.setDate(fechaInicio.getDate() + 30)
+
+      const agregarRes = await fetch("/api/cliente/itinerarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id_venta: idVenta,
+          id_servicio: deseos.fk_servicio,
+          fecha_inicio: fechaInicio.toISOString().split('T')[0],
+          aplicar_descuento: false,
+        }),
+      })
+
+      if (!agregarRes.ok) {
+        const errorData = await agregarRes.json()
+        throw new Error(errorData.error || "Error agregando al carrito")
+      }
+
+      toast.success("Servicio agregado al carrito", {
+        description: "Puedes continuar agregando más servicios o ir al checkout",
+      })
+
+      router.push("/carrito")
+    } catch (err: any) {
+      console.error("Error agregando al carrito:", err)
+      toast.error("Error", {
+        description: err.message ?? "No se pudo agregar el servicio al carrito",
+      })
+    } finally {
+      setAddingToCart(false)
     }
   }
 
@@ -200,12 +258,30 @@ export function Wishlist() {
 
               <div className="space-y-2">
                 {deseos.fk_servicio && (
-                  <Button asChild className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90">
-                    <Link href={`/servicios/${deseos.fk_servicio}`}>
-                      <ShoppingCart className="mr-2 h-4 w-4" />
-                      Ver Detalles
-                    </Link>
-                  </Button>
+                  <>
+                    <Button 
+                      className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90"
+                      onClick={handleAddToCart}
+                      disabled={addingToCart}
+                    >
+                      {addingToCart ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Agregando...
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="mr-2 h-4 w-4" />
+                          Agregar al Carrito
+                        </>
+                      )}
+                    </Button>
+                    <Button asChild variant="outline" className="w-full">
+                      <Link href={`/servicio/${deseos.fk_servicio}`}>
+                        Ver Detalles
+                      </Link>
+                    </Button>
+                  </>
                 )}
                 {deseos.fk_lugar && (
                   <Button asChild className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90">
