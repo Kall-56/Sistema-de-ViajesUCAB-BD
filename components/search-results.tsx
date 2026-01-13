@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,99 +22,108 @@ import {
   CheckCircle2,
   Plus,
   ShoppingCart,
+  Loader2,
 } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { WishlistButton } from "@/components/wishlist-button"
 
-const mockResults = [
-  {
-    id: 1,
-    title: "Paquete Todo Incluido - Punta Cana",
-    destination: "Punta Cana, República Dominicana",
-    price: 2450,
-    duration: "7 noches",
-    rating: 4.8,
-    reviews: 234,
-    image: "beach-resort",
-    includes: ["Vuelo", "Hotel 5★", "Todo incluido", "Traslados"],
-    type: "beach",
-  },
-  {
-    id: 2,
-    title: "Tour Europeo - Madrid y Barcelona",
-    destination: "España",
-    price: 3200,
-    duration: "10 días",
-    rating: 4.9,
-    reviews: 189,
-    image: "europe-tour",
-    includes: ["Vuelo", "Hotel 4★", "Tours guiados", "Desayuno"],
-    type: "cultural",
-  },
-  {
-    id: 3,
-    title: "Aventura en Patagonia",
-    destination: "Argentina y Chile",
-    price: 2890,
-    duration: "8 días",
-    rating: 4.7,
-    reviews: 156,
-    image: "patagonia",
-    includes: ["Vuelo", "Alojamiento", "Excursiones", "Guía"],
-    type: "adventure",
-  },
-  {
-    id: 4,
-    title: "Crucero por el Caribe",
-    destination: "Caribe",
-    price: 1950,
-    duration: "5 noches",
-    rating: 4.6,
-    reviews: 312,
-    image: "cruise",
-    includes: ["Crucero", "Todo incluido", "Entretenimiento", "Excursiones"],
-    type: "cruise",
-  },
-  {
-    id: 5,
-    title: "Safari en Kenia",
-    destination: "Kenia, África",
-    price: 4500,
-    duration: "12 días",
-    rating: 5.0,
-    reviews: 98,
-    image: "safari",
-    includes: ["Vuelo", "Lodge", "Safaris", "Guía experto"],
-    type: "adventure",
-  },
-  {
-    id: 6,
-    title: "Relax en Cancún",
-    destination: "Cancún, México",
-    price: 1850,
-    duration: "5 noches",
-    rating: 4.5,
-    reviews: 421,
-    image: "cancun",
-    includes: ["Vuelo", "Hotel 4★", "Desayuno", "Traslados"],
-    type: "beach",
-  },
-]
+type SearchResult = {
+  id: number | string;
+  title: string;
+  destination: string;
+  price: number;
+  price_bs?: number;
+  denominacion?: string;
+  duration: string;
+  rating: number;
+  reviews: number;
+  image: string;
+  includes: string[];
+  type: string;
+  ids_servicios?: number[] | null;
+  id_paquete?: number;
+}
 
 export function SearchResults() {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [priceRange, setPriceRange] = useState([0, 5000])
   const [selectedTypes, setSelectedTypes] = useState<string[]>([])
   const [sortBy, setSortBy] = useState("recommended")
   const [compareList, setCompareList] = useState<number[]>([])
+  const [loading, setLoading] = useState(true)
+  const [results, setResults] = useState<SearchResult[]>([])
 
-  const toggleCompare = (id: number) => {
-    setCompareList((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
+  useEffect(() => {
+    async function loadResults() {
+      setLoading(true)
+      try {
+        const [paquetesRes, serviciosRes] = await Promise.all([
+          fetch("/api/paquetes", { cache: "no-store" }),
+          fetch("/api/cliente/servicios", { cache: "no-store" })
+        ])
+
+        const paquetesData = paquetesRes.ok ? await paquetesRes.json() : { paquetes: [] }
+        const serviciosData = serviciosRes.ok ? await serviciosRes.json() : { servicios: [] }
+
+        const paquetesResults: SearchResult[] = (paquetesData.paquetes || []).map((p: any) => ({
+          id: `paquete-${p.id_paquete}`,
+          title: p.nombre_paquete,
+          destination: p.destinos && p.destinos.length > 0 ? p.destinos.join(", ") : "Destino no especificado",
+          price: p.precio_total || 0,
+          price_bs: p.precio_total_bs || p.precio_total || 0,
+          denominacion: p.denominacion || "USD",
+          duration: "Duración variable",
+          rating: 4.5,
+          reviews: 0,
+          image: p.imagen_principal || "/placeholder.svg",
+          includes: p.nombres_servicios || [],
+          type: p.tipo_paquete?.toLowerCase() || "paquete",
+          ids_servicios: p.ids_servicios,
+          id_paquete: p.id_paquete
+        }))
+
+        const serviciosResults: SearchResult[] = (serviciosData.servicios || []).map((s: any) => ({
+          id: s.id,
+          title: s.nombre,
+          destination: s.lugar_nombre || "Destino no especificado",
+          price: s.costo_servicio || 0,
+          price_bs: s.costo_servicio_bs || s.costo_servicio || 0,
+          denominacion: s.denominacion || "USD",
+          duration: "Variable",
+          rating: 4.5,
+          reviews: 0,
+          image: s.imagen_principal || "/placeholder.svg",
+          includes: [s.tipo_servicio],
+          type: s.tipo_servicio?.toLowerCase() || "servicio"
+        }))
+
+        setResults([...paquetesResults, ...serviciosResults])
+      } catch (err) {
+        console.error("Error cargando resultados:", err)
+        setResults([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadResults()
+  }, [])
+
+  const toggleCompare = (id: number | string) => {
+    setCompareList((prev) => {
+      const idNum = typeof id === "string" ? parseInt(id.replace("paquete-", "")) : id
+      return prev.includes(idNum) ? prev.filter((item) => item !== idNum) : [...prev, idNum]
+    })
   }
 
-  const filteredResults = mockResults.filter((result) => {
+  const filteredResults = results.filter((result) => {
     const matchesPrice = result.price >= priceRange[0] && result.price <= priceRange[1]
     const matchesType = selectedTypes.length === 0 || selectedTypes.includes(result.type)
-    return matchesPrice && matchesType
+    const matchesSearch = !searchQuery || 
+      result.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      result.destination.toLowerCase().includes(searchQuery.toLowerCase())
+    return matchesPrice && matchesType && matchesSearch
   })
 
   return (
@@ -273,7 +282,11 @@ export function SearchResults() {
                   </SheetContent>
                 </Sheet>
 
-                <p className="text-sm text-muted-foreground">{filteredResults.length} resultados encontrados</p>
+                {loading ? (
+                  <p className="text-sm text-muted-foreground">Cargando resultados...</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{filteredResults.length} resultados encontrados</p>
+                )}
               </div>
 
               <Select value={sortBy} onValueChange={setSortBy}>
@@ -315,9 +328,14 @@ export function SearchResults() {
                 <Card key={result.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                   <div className="relative">
                     <div className="h-48 bg-gradient-to-br from-[#E91E63]/20 to-[#C2185B]/20" />
-                    <Button size="icon" variant="secondary" className="absolute top-3 right-3 rounded-full">
-                      <Heart className="h-4 w-4" />
-                    </Button>
+                    <div className="absolute top-3 right-3">
+                      <WishlistButton
+                        itemId={result.id}
+                        itemName={result.title}
+                        itemType="servicio"
+                        variant="icon"
+                      />
+                    </div>
                     <Badge className="absolute bottom-3 left-3 bg-white text-gray-900">{result.duration}</Badge>
                   </div>
                   <CardContent className="p-4">
@@ -330,7 +348,21 @@ export function SearchResults() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-bold text-[#E91E63]">${result.price}</p>
+                        <p className="text-2xl font-bold text-[#E91E63]">
+                          {result.denominacion === "VEN" 
+                            ? `Bs. ${result.price_bs?.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || result.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                            : result.denominacion === "USD"
+                            ? `$${result.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                            : result.denominacion === "EUR"
+                            ? `€${result.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                            : `${result.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${result.denominacion || "USD"}`
+                          }
+                        </p>
+                        {result.denominacion && result.denominacion !== "VEN" && result.price_bs && (
+                          <p className="text-xs text-muted-foreground">
+                            Bs. {result.price_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </p>
+                        )}
                         <p className="text-xs text-muted-foreground">por persona</p>
                       </div>
                     </div>
@@ -351,8 +383,18 @@ export function SearchResults() {
                     </div>
 
                     <div className="flex gap-2">
-                      <Button asChild className="flex-1 bg-[#E91E63] hover:bg-[#E91E63]/90">
-                        <Link href={`/servicio/${result.id}`}>Ver detalles</Link>
+                      <Button 
+                        className="flex-1 bg-[#E91E63] hover:bg-[#E91E63]/90"
+                        onClick={() => {
+                          if (typeof result.id === "string" && result.id.startsWith("paquete-")) {
+                            const paqueteId = result.id.replace("paquete-", "")
+                            router.push(`/paquetes/${paqueteId}`)
+                          } else {
+                            router.push(`/servicio/${result.id}`)
+                          }
+                        }}
+                      >
+                        Ver detalles
                       </Button>
                       <Button asChild variant="outline" size="icon" className="bg-transparent">
                         <Link href="/carrito">
@@ -375,8 +417,9 @@ export function SearchResults() {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

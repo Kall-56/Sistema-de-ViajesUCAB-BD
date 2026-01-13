@@ -21,10 +21,58 @@ export async function GET() {
         s.tipo_servicio,
         l.nombre AS lugar_nombre,
         p.nombre_proveedor,
-        -- Calcular precio con descuento
+        -- Calcular precio con descuento (en moneda original)
         (s.costo_servicio * (1 - d.porcentaje_descuento / 100.0))::integer AS precio_con_descuento,
-        -- Calcular ahorro
+        -- Calcular precio original convertido a Bs
+        CASE 
+          WHEN s.denominacion != 'VEN' THEN
+            s.costo_servicio * 
+            COALESCE(
+              (SELECT cantidad_cambio 
+               FROM cambio_moneda 
+               WHERE denominacion = s.denominacion 
+                 AND fecha_fin IS NULL 
+               ORDER BY fecha_inicio DESC 
+               LIMIT 1), 
+              1
+            )
+          ELSE
+            s.costo_servicio
+        END AS costo_servicio_bs,
+        -- Calcular precio con descuento convertido a Bs
+        CASE 
+          WHEN s.denominacion != 'VEN' THEN
+            (s.costo_servicio * (1 - d.porcentaje_descuento / 100.0))::integer * 
+            COALESCE(
+              (SELECT cantidad_cambio 
+               FROM cambio_moneda 
+               WHERE denominacion = s.denominacion 
+                 AND fecha_fin IS NULL 
+               ORDER BY fecha_inicio DESC 
+               LIMIT 1), 
+              1
+            )
+          ELSE
+            (s.costo_servicio * (1 - d.porcentaje_descuento / 100.0))::integer
+        END AS precio_con_descuento_bs,
+        -- Calcular ahorro (en moneda original)
         (s.costo_servicio * (d.porcentaje_descuento / 100.0))::integer AS ahorro,
+        -- Calcular ahorro convertido a Bs
+        CASE 
+          WHEN s.denominacion != 'VEN' THEN
+            (s.costo_servicio * (d.porcentaje_descuento / 100.0))::integer * 
+            COALESCE(
+              (SELECT cantidad_cambio 
+               FROM cambio_moneda 
+               WHERE denominacion = s.denominacion 
+                 AND fecha_fin IS NULL 
+               ORDER BY fecha_inicio DESC 
+               LIMIT 1), 
+              1
+            )
+          ELSE
+            (s.costo_servicio * (d.porcentaje_descuento / 100.0))::integer
+        END AS ahorro_bs,
         -- Días restantes
         CASE 
           WHEN d.fecha_vencimiento IS NULL THEN NULL
@@ -43,10 +91,11 @@ export async function GET() {
       LIMIT 50
     `);
 
-    return NextResponse.json({ promociones: rows });
+    return NextResponse.json({ promociones: rows || [] });
   } catch (e: any) {
+    console.error("Error obteniendo promociones:", e);
     return NextResponse.json(
-      { error: e?.message ?? "Error obteniendo promociones" },
+      { error: e?.message ?? "Error obteniendo promociones", promociones: [] },
       { status: 500 }
     );
   }

@@ -82,6 +82,8 @@ export function CartCheckout() {
   const [installments, setInstallments] = useState("1")
   const [useMiles, setUseMiles] = useState(false)
   const [milesAmount, setMilesAmount] = useState("0")
+  const [milesAvailable, setMilesAvailable] = useState(0)
+  const [milesMethodId, setMilesMethodId] = useState<number | null>(null)
   const [processing, setProcessing] = useState(false)
   
   // Estados para datos de pago
@@ -98,10 +100,12 @@ export function CartCheckout() {
 
   useEffect(() => {
     loadCart()
+    loadMiles()
     
     // Escuchar eventos de actualización del carrito
     const handleCartUpdate = () => {
       loadCart()
+      loadMiles()
     }
     
     window.addEventListener("cart-updated", handleCartUpdate)
@@ -110,6 +114,19 @@ export function CartCheckout() {
       window.removeEventListener("cart-updated", handleCartUpdate)
     }
   }, [])
+
+  async function loadMiles() {
+    try {
+      const r = await fetch("/api/cliente/millas", { cache: "no-store" })
+      const data = await r.json()
+      if (r.ok) {
+        setMilesAvailable(data.cantidad_millas || 0)
+        setMilesMethodId(data.id_metodo_pago || null)
+      }
+    } catch (err) {
+      console.error("Error cargando millas:", err)
+    }
+  }
 
   async function loadCart() {
     setLoading(true)
@@ -279,13 +296,47 @@ export function CartCheckout() {
           };
         }
 
+        // Si se usan millas, usar el método de pago de millas
+        let metodoPagoFinal = metodoPagoBD;
+        let datosMetodoPagoFinal = datosMetodoPago;
+        let montoPagoFinal = venta.monto_total;
+        
+        if (useMiles && milesMethodId && Number.parseInt(milesAmount) > 0) {
+          // Calcular descuento por millas
+          const millasUsadas = Number.parseInt(milesAmount);
+          const descuentoMillasUSD = millasUsadas * 0.01; // 1 milla = $0.01 USD
+          const descuentoMillasBS = descuentoMillasUSD * tasaCambioUSD;
+          
+          // Reducir el monto a pagar
+          montoPagoFinal = Math.max(0, venta.monto_total - descuentoMillasBS);
+          
+          // Si el monto después del descuento es 0 o muy pequeño, usar solo millas
+          if (montoPagoFinal < 1) {
+            metodoPagoFinal = "milla";
+            datosMetodoPagoFinal = {
+              cantidad_millas: millasUsadas
+            };
+            montoPagoFinal = 0;
+          } else {
+            // Combinar millas con otro método de pago
+            // Primero pagar con millas, luego con el método seleccionado
+            metodoPagoFinal = "milla";
+            datosMetodoPagoFinal = {
+              cantidad_millas: millasUsadas,
+              metodo_adicional: metodoPagoBD,
+              datos_metodo_adicional: datosMetodoPago
+            };
+          }
+        }
+
         return {
           id_venta: venta.id_venta,
-          metodo_pago: metodoPagoBD,
-          datos_metodo_pago: datosMetodoPago,
-          monto_pago: venta.monto_total, // Monto total de la venta en Bs
+          metodo_pago: metodoPagoFinal,
+          datos_metodo_pago: datosMetodoPagoFinal,
+          monto_pago: montoPagoFinal,
           denominacion: "VEN",
           plan_cuotas: planCuotas,
+          usar_millas: useMiles && milesMethodId ? Number.parseInt(milesAmount) : 0,
         }
       })
 
@@ -882,26 +933,41 @@ export function CartCheckout() {
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Millas disponibles:</span>
-                    <span className="font-semibold">15,420 millas</span>
+                    <span className="font-semibold">{milesAvailable.toLocaleString("es-VE")} millas</span>
                   </div>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox checked={useMiles} onCheckedChange={(checked) => setUseMiles(checked as boolean)} />
-                    <span className="text-sm">Usar millas en esta reserva</span>
-                  </label>
-                  {useMiles && (
-                    <div className="space-y-2">
-                      <Label>Cantidad de millas a usar</Label>
-                      <Input
-                        type="number"
-                        placeholder="0"
-                        max="15420"
-                        value={milesAmount}
-                        onChange={(e) => setMilesAmount(e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        1 milla = Bs. {(0.01 * tasaCambioUSD).toFixed(2)}. Descuento máximo: Bs. {(15420 * 0.01 * tasaCambioUSD).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </p>
-                    </div>
+                  {milesAvailable > 0 ? (
+                    <>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox checked={useMiles} onCheckedChange={(checked) => setUseMiles(checked as boolean)} />
+                        <span className="text-sm">Usar millas en esta reserva</span>
+                      </label>
+                      {useMiles && (
+                        <div className="space-y-2">
+                          <Label>Cantidad de millas a usar</Label>
+                          <Input
+                            type="number"
+                            placeholder="0"
+                            min="0"
+                            max={milesAvailable}
+                            value={milesAmount}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              const numValue = Number.parseInt(value) || 0;
+                              if (numValue <= milesAvailable) {
+                                setMilesAmount(value);
+                              } else {
+                                setMilesAmount(milesAvailable.toString());
+                              }
+                            }}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            1 milla = Bs. {(0.01 * tasaCambioUSD).toFixed(2)}. Descuento máximo: Bs. {(milesAvailable * 0.01 * tasaCambioUSD).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No tienes millas disponibles</p>
                   )}
                 </CardContent>
               </Card>

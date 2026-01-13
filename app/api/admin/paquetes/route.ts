@@ -22,8 +22,10 @@ export async function GET() {
         (SELECT array_agg(s.nombre) FROM paquete_servicio ps 
          JOIN servicio s ON s.id = ps.fk_servicio 
          WHERE ps.fk_paquete = p.id) AS nombres_servicios,
-        -- Array de restricciones
-        (SELECT array_agg(r.descripcion) FROM restriccion r WHERE r.fk_paquete = p.id) AS restricciones
+        -- Array de restricciones (formato: caracteristica operador valor)
+        (SELECT array_agg(
+          r.caracteristica || ' ' || r.operador || ' ' || r.valor_restriccion
+        ) FROM restriccion r WHERE r.fk_paquete = p.id) AS restricciones
       FROM paquete p
       ORDER BY p.id DESC
     `);

@@ -20,8 +20,12 @@ type PromocionAPI = {
   servicio_nombre: string;
   descripcion: string;
   costo_servicio: number;
+  costo_servicio_bs?: number;
+  denominacion: string;
   precio_con_descuento: number;
+  precio_con_descuento_bs?: number;
   ahorro: number;
+  ahorro_bs?: number;
   imagen_principal: string | null;
 };
 
@@ -31,12 +35,16 @@ type PromocionDisplay = {
   description: string;
   discount: string;
   originalPrice: number;
+  originalPrice_bs?: number;
   price: number;
+  price_bs?: number;
+  denominacion?: string;
   savings: number;
+  savings_bs?: number;
   image: string | null;
   isHotDeal: boolean;
-  servicioId?: number; // ID del servicio para agregar al carrito
-  descuentoId?: number; // ID del descuento
+  servicioId?: number;
+  descuentoId?: number;
 };
 
 export function PromotionsSection() {
@@ -68,12 +76,16 @@ export function PromotionsSection() {
             description: p.descripcion || "Sin descripción",
             discount: `${p.porcentaje_descuento}% OFF`,
             originalPrice: p.costo_servicio,
+            originalPrice_bs: p.costo_servicio_bs || (p.precio_con_descuento_bs ? p.costo_servicio * (p.precio_con_descuento_bs / p.precio_con_descuento) : undefined),
             price: p.precio_con_descuento,
+            price_bs: p.precio_con_descuento_bs || p.precio_con_descuento,
+            denominacion: p.denominacion || "USD",
             savings: p.ahorro,
+            savings_bs: p.ahorro_bs || p.ahorro,
             image: p.imagen_principal,
             isHotDeal: p.porcentaje_descuento >= 30,
-            servicioId: p.servicio_id, // Guardar servicio_id directamente
-            descuentoId: p.descuento_id // Guardar descuento_id directamente
+            servicioId: p.servicio_id,
+            descuentoId: p.descuento_id
           }))
         
         setPromotions(mapped)
@@ -255,20 +267,56 @@ export function PromotionsSection() {
                 <p className="mb-4 text-sm leading-relaxed text-muted-foreground">{promo.description}</p>
                 <div className="mb-4 border-t pt-4">
                   <div className="mb-2 flex items-center gap-2">
-                    <span className="text-base text-muted-foreground line-through">
-                      ${promo.originalPrice.toLocaleString()}
-                    </span>
-                    <Badge
-                      variant="secondary"
-                      className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100"
-                    >
-                      Ahorras ${promo.savings}
-                    </Badge>
+                    {promo.denominacion === "VEN" ? (
+                      <>
+                        {promo.originalPrice_bs && (
+                          <span className="text-base text-muted-foreground line-through">
+                            Bs. {promo.originalPrice_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
+                        )}
+                        <Badge
+                          variant="secondary"
+                          className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100"
+                        >
+                          Ahorras Bs. {promo.savings_bs?.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || promo.savings.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </Badge>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-base text-muted-foreground line-through">
+                          {promo.denominacion === "USD" ? "$" : promo.denominacion === "EUR" ? "€" : ""}
+                          {promo.originalPrice.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
+                        <Badge
+                          variant="secondary"
+                          className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100"
+                        >
+                          Ahorras {promo.denominacion === "USD" ? "$" : promo.denominacion === "EUR" ? "€" : ""}
+                          {promo.savings.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </Badge>
+                      </>
+                    )}
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-[#E91E63]">${promo.price.toLocaleString()}</span>
-                    <span className="text-sm text-muted-foreground">USD</span>
+                    <span className="text-2xl font-bold text-[#E91E63]">
+                      {promo.denominacion === "VEN" 
+                        ? `Bs. ${promo.price_bs?.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || promo.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                        : promo.denominacion === "USD"
+                        ? `$${promo.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                        : promo.denominacion === "EUR"
+                        ? `€${promo.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                        : `${promo.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${promo.denominacion || "USD"}`
+                      }
+                    </span>
+                    {promo.denominacion && promo.denominacion !== "VEN" && (
+                      <span className="text-sm text-muted-foreground">{promo.denominacion}</span>
+                    )}
                   </div>
+                  {promo.denominacion && promo.denominacion !== "VEN" && promo.price_bs && (
+                    <p className="text-xs text-muted-foreground">
+                      Bs. {promo.price_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
                 </div>
                 <Button 
                   className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90"

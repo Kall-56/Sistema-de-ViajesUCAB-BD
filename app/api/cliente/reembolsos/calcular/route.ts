@@ -22,6 +22,7 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const idVenta = searchParams.get("id_venta");
+    const esCancelacionVoluntaria = searchParams.get("es_cancelacion_voluntaria") === "true";
 
     if (!idVenta || !Number.isInteger(Number(idVenta)) || Number(idVenta) <= 0) {
       return NextResponse.json(
@@ -91,12 +92,25 @@ export async function GET(req: Request) {
       );
     }
 
-    // El procedimiento realizar_reembolso reembolsa el monto_total completo
-    // Si en el futuro se necesita penalización, debe calcularse en una función de BD
-    // Por ahora, el monto de reembolso es igual al monto total
-    const montoReembolso = Number(venta.monto_total);
-    const montoOriginal = montoReembolso;
-    const penalizacion = 0; // Por ahora no hay penalización en el procedimiento
+    // Calcular monto de reembolso según la lógica de la BD
+    // La función realizar_reembolso ahora acepta un parámetro i_es_cancelacion_voluntaria
+    // Si es true: penalización del 10%, reembolso del 90%
+    // Si es false: reembolso del 100%
+    
+    const montoOriginal = Number(venta.monto_total);
+    
+    let montoReembolso: number;
+    let penalizacion: number;
+    
+    if (esCancelacionVoluntaria) {
+      // Cancelación voluntaria: penalización del 10%
+      penalizacion = Math.round(montoOriginal * 0.10);
+      montoReembolso = montoOriginal - penalizacion;
+    } else {
+      // Reembolso total: sin penalización
+      penalizacion = 0;
+      montoReembolso = montoOriginal;
+    }
 
     return NextResponse.json({
       id_venta: idVentaNum,

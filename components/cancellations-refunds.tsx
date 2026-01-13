@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { XCircle, AlertTriangle, Download, CheckCircle2, Clock, Loader2 } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 
 type VentaPagada = {
   id_venta: number
@@ -51,6 +52,7 @@ export function CancellationsRefunds() {
   const [reembolsos, setReembolsos] = useState<Reembolso[]>([])
   const [selectedReservation, setSelectedReservation] = useState("")
   const [cancellationReason, setCancellationReason] = useState("")
+  const [esCancelacionVoluntaria, setEsCancelacionVoluntaria] = useState(false)
 
   useEffect(() => {
     loadVentasPagadas()
@@ -125,7 +127,10 @@ export function CancellationsRefunds() {
       const r = await fetch("/api/cliente/reembolsos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_venta: idVenta }),
+        body: JSON.stringify({ 
+          id_venta: idVenta,
+          es_cancelacion_voluntaria: esCancelacionVoluntaria
+        }),
       })
 
       const data = await r.json()
@@ -171,7 +176,7 @@ export function CancellationsRefunds() {
 
       setCalculandoMonto(true)
       try {
-        const r = await fetch(`/api/cliente/reembolsos/calcular?id_venta=${selectedReservation}`, {
+        const r = await fetch(`/api/cliente/reembolsos/calcular?id_venta=${selectedReservation}&es_cancelacion_voluntaria=${esCancelacionVoluntaria}`, {
           cache: "no-store"
         })
         const data = await r.json()
@@ -200,7 +205,7 @@ export function CancellationsRefunds() {
     }
 
     calcularMontoReembolso()
-  }, [selectedReservation])
+  }, [selectedReservation, esCancelacionVoluntaria])
 
   const montoOriginal = montoCalculado?.monto_original || selectedVenta?.monto_total || 0
   const penalizacion = montoCalculado?.penalizacion || 0
@@ -255,15 +260,18 @@ export function CancellationsRefunds() {
         <CardContent className="p-6 space-y-4">
           <div className="space-y-2">
             <Label htmlFor="reservation">Seleccionar Reserva</Label>
-            <Select value={selectedReservation} onValueChange={setSelectedReservation}>
+            <Select 
+              value={selectedReservation || undefined} 
+              onValueChange={setSelectedReservation}
+            >
               <SelectTrigger id="reservation">
                 <SelectValue placeholder="Elige una reserva pagada" />
               </SelectTrigger>
               <SelectContent>
                 {ventasPagadas.length === 0 ? (
-                  <SelectItem value="" disabled>
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
                     No hay reservas pagadas disponibles
-                  </SelectItem>
+                  </div>
                 ) : (
                   ventasPagadas.map((venta) => (
                     <SelectItem key={venta.id_venta} value={venta.id_venta.toString()}>
@@ -342,10 +350,34 @@ export function CancellationsRefunds() {
                 />
               </div>
 
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 p-4 border rounded-lg bg-muted/30">
+                  <Checkbox
+                    id="cancelacion-voluntaria"
+                    checked={esCancelacionVoluntaria}
+                    onCheckedChange={(checked) => setEsCancelacionVoluntaria(checked as boolean)}
+                    className="mt-1"
+                  />
+                  <div className="flex-1 space-y-1">
+                    <Label htmlFor="cancelacion-voluntaria" className="cursor-pointer font-medium">
+                      Cancelación voluntaria
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Si marcas esta opción, se aplicará una penalización del 10% sobre el monto total. 
+                      Si no la marcas, se procesará un reembolso total (100%) por parte de la empresa.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-lg p-4">
                 <p className="text-sm text-amber-800 dark:text-amber-200">
                   <AlertTriangle className="h-4 w-4 inline mr-2" />
-                  <strong>Política de Cancelación:</strong> El monto de reembolso se calcula automáticamente según las políticas de la empresa.
+                  <strong>Política de Cancelación:</strong> {
+                    esCancelacionVoluntaria 
+                      ? "Cancelación voluntaria: se aplica penalización del 10%, reembolso del 90%."
+                      : "Reembolso total: se reembolsa el 100% del monto pagado."
+                  }
                   El reembolso se procesará y se reflejará en tu método de pago original.
                 </p>
               </div>

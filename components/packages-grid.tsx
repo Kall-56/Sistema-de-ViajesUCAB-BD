@@ -20,6 +20,8 @@ type PaqueteAPI = {
   nombres_servicios: string[] | null;
   restricciones: string[] | null;
   precio_total: number;
+  precio_total_bs?: number;
+  denominacion?: string;
   millas_totales: number;
   imagen_principal: string | null;
   destinos: string[] | null;
@@ -32,12 +34,15 @@ type PaqueteDisplay = {
   description: string;
   duration: string;
   price: number;
+  price_bs?: number;
+  denominacion?: string;
   miles: number;
   rating: number;
   reviews: number;
   image: string | null;
   type: string;
   includes: string[];
+  ids_servicios?: number[] | null;
 };
 
 const allPackages = [
@@ -159,14 +164,17 @@ export function PackagesGrid() {
             name: p.nombre_paquete,
             destination: destinos,
             description: p.descripcion_paquete || "Sin descripción",
-            duration: "Duración variable", // No tenemos duración en BD
+            duration: "Duración variable",
             price: p.precio_total || 0,
+            price_bs: p.precio_total_bs || p.precio_total || 0,
+            denominacion: p.denominacion || "USD",
             miles: p.millas_totales || 0,
-            rating: 4.5, // Placeholder
-            reviews: 0, // Placeholder
+            rating: 4.5,
+            reviews: 0,
             image: p.imagen_principal,
             type: p.tipo_paquete,
-            includes: p.nombres_servicios || []
+            includes: p.nombres_servicios || [],
+            ids_servicios: p.ids_servicios
           };
         });
         
@@ -310,7 +318,16 @@ export function PackagesGrid() {
                   className="h-56 w-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
                 <Badge className="absolute left-4 top-4 bg-primary text-primary-foreground">{pkg.type}</Badge>
-                {/* Wishlist no disponible para paquetes (solo servicio o lugar en BD) */}
+                {pkg.ids_servicios && pkg.ids_servicios.length > 0 && (
+                  <div className="absolute top-3 right-3">
+                    <WishlistButton
+                      itemId={pkg.ids_servicios[0]}
+                      itemName={pkg.name}
+                      itemType="servicio"
+                      variant="icon"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="p-5">
@@ -344,8 +361,22 @@ export function PackagesGrid() {
                 <div className="mb-4 border-t pt-3">
                   <div className="flex items-baseline gap-2">
                     <span className="text-sm text-muted-foreground">Desde</span>
-                    <span className="text-xl font-bold text-[#E91E63]">${pkg.price.toLocaleString()}</span>
+                    <span className="text-xl font-bold text-[#E91E63]">
+                      {pkg.denominacion === "VEN" 
+                        ? `Bs. ${pkg.price_bs?.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || pkg.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                        : pkg.denominacion === "USD"
+                        ? `$${pkg.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                        : pkg.denominacion === "EUR"
+                        ? `€${pkg.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                        : `${pkg.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${pkg.denominacion || "USD"}`
+                      }
+                    </span>
                   </div>
+                  {pkg.denominacion && pkg.denominacion !== "VEN" && pkg.price_bs && (
+                    <p className="text-xs text-muted-foreground">
+                      Bs. {pkg.price_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-muted-foreground">o {pkg.miles.toLocaleString()} millas</p>
                 </div>
 

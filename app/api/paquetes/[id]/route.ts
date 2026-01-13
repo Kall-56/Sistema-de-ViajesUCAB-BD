@@ -4,8 +4,11 @@ import { pool } from "@/lib/db";
 /**
  * GET /api/paquetes/[id]
  * 
- * Obtener detalles de un paquete específico usando el SP obtener_paquete.
+ * Obtener detalles de un paquete específico.
  * Esta API es pública (no requiere autenticación) para que los clientes puedan ver detalles.
+ * 
+ * Nota: No usa la función obtener_paquete de la BD porque tiene un error (intenta usar r.descripcion que no existe).
+ * En su lugar, construye la respuesta manualmente desde las tablas.
  * 
  * Retorna:
  * - id_paquete
@@ -14,6 +17,11 @@ import { pool } from "@/lib/db";
  * - tipo_paquete
  * - restricciones (array)
  * - ids_servicios (array)
+ * - servicios (array con detalles completos)
+ * - precio_total
+ * - millas_totales
+ * - destinos
+ * - imagen_principal
  */
 export async function GET(
   _req: Request,
@@ -25,17 +33,44 @@ export async function GET(
   }
 
   try {
-    // Usar función almacenada obtener_paquete
-    const { rows } = await pool.query(
-      `SELECT * FROM obtener_paquete($1)`,
+    // Obtener información básica del paquete directamente
+    // (No usar obtener_paquete porque tiene error con r.descripcion)
+    const { rows: paqueteRows } = await pool.query(
+      `SELECT id, nombre, descripcion, tipo_paquete FROM paquete WHERE id = $1`,
       [id]
     );
 
-    if (!rows?.length) {
+    if (!paqueteRows?.length) {
       return NextResponse.json({ error: "Paquete no encontrado" }, { status: 404 });
     }
 
-    const paquete = rows[0];
+    const paqueteBase = paqueteRows[0];
+
+    // Obtener restricciones manualmente (construyendo descripción)
+    const { rows: restriccionesRows } = await pool.query(
+      `SELECT 
+        r.caracteristica || ' ' || r.operador || ' ' || r.valor_restriccion AS descripcion
+       FROM restriccion r 
+       WHERE r.fk_paquete = $1`,
+      [id]
+    );
+
+    // Obtener IDs de servicios
+    const { rows: serviciosIdsRows } = await pool.query(
+      `SELECT array_agg(ps.fk_servicio) AS ids_servicios
+       FROM paquete_servicio ps 
+       WHERE ps.fk_paquete = $1`,
+      [id]
+    );
+
+    const paquete = {
+      id_paquete: paqueteBase.id,
+      nombre_paquete: paqueteBase.nombre,
+      descripcion_paquete: paqueteBase.descripcion,
+      tipo_paquete: paqueteBase.tipo_paquete,
+      restricciones: restriccionesRows.map(r => r.descripcion) || [],
+      ids_servicios: serviciosIdsRows[0]?.ids_servicios || []
+    };
     
     // La función retorna: id_paquete, nombre_paquete, descripcion_paquete, tipo_paquete, restricciones, ids_servicios
     // Necesitamos obtener información adicional de los servicios para mostrar en el frontend

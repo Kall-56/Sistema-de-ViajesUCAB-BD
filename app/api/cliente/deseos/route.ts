@@ -44,7 +44,27 @@ export async function GET() {
         CASE 
           WHEN ld.fk_servicio IS NOT NULL THEN s.denominacion
           ELSE NULL
-        END AS servicio_denominacion,
+        END AS servicio_denominacion_original,
+        CASE 
+          WHEN ld.fk_servicio IS NOT NULL THEN 
+            CASE 
+              WHEN s.denominacion != 'VEN' THEN
+                s.costo_servicio * 
+                COALESCE(
+                  (SELECT cantidad_cambio 
+                   FROM cambio_moneda 
+                   WHERE denominacion = s.denominacion 
+                     AND fecha_fin IS NULL 
+                   ORDER BY fecha_inicio DESC 
+                   LIMIT 1), 
+                  1
+                )
+              ELSE
+                s.costo_servicio
+            END
+          ELSE NULL
+        END AS servicio_costo_bs,
+        'VEN' AS servicio_denominacion,
         CASE 
           WHEN ld.fk_servicio IS NOT NULL THEN (
             SELECT i.link FROM imagen i WHERE i.fk_servicio = s.id LIMIT 1
@@ -103,60 +123,41 @@ export async function POST(req: Request) {
       fk_servicio?: number | null;
     };
 
-    // Validar que solo uno de los dos esté presente
-    if (fk_lugar !== null && fk_servicio !== null) {
-      return NextResponse.json(
-        { error: "No se pueden asignar un lugar y un servicio al mismo tiempo" },
-        { status: 400 }
+    // Usar la función de BD listar_deseos para insertar
+    // La función maneja las validaciones internamente:
+    // - No permite lugar y servicio al mismo tiempo
+    // - Requiere al menos uno de los dos
+    // - Valida existencia de FK
+    // 
+    // Nota: La función solo hace INSERT, no UPDATE.
+    // Si ya existe un registro, usamos ON CONFLICT para actualizar.
+    
+    // Primero intentar con la función de BD
+    try {
+      await pool.query(
+        `SELECT listar_deseos($1, $2, $3)`,
+        [clienteId, fk_lugar || null, fk_servicio || null]
       );
-    }
-
-    if ((fk_lugar === null || fk_lugar === undefined) && (fk_servicio === null || fk_servicio === undefined)) {
-      return NextResponse.json(
-        { error: "Debe proporcionar al menos un ID de lugar o de servicio" },
-        { status: 400 }
-      );
-    }
-
-    // Verificar que el lugar o servicio existe
-    if (fk_lugar !== null && fk_lugar !== undefined) {
-      const { rows: lugarRows } = await pool.query(
-        `SELECT id FROM lugar WHERE id = $1`,
-        [fk_lugar]
-      );
-      if (!lugarRows?.length) {
-        return NextResponse.json(
-          { error: "El lugar especificado no existe" },
-          { status: 404 }
+    } catch (dbError: any) {
+      // Si ya existe un registro (unique violation), actualizarlo
+      if (dbError.code === '23505') {
+        // La función no maneja UPDATE, así que usamos ON CONFLICT
+        await pool.query(
+          `
+          INSERT INTO lista_deseo (fk_cliente, fk_lugar, fk_servicio)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (fk_cliente) 
+          DO UPDATE SET 
+            fk_lugar = EXCLUDED.fk_lugar,
+            fk_servicio = EXCLUDED.fk_servicio
+          `,
+          [clienteId, fk_lugar || null, fk_servicio || null]
         );
+      } else {
+        // Re-lanzar otros errores (la función ya tiene mensajes claros)
+        throw dbError;
       }
     }
-
-    if (fk_servicio !== null && fk_servicio !== undefined) {
-      const { rows: servicioRows } = await pool.query(
-        `SELECT id FROM servicio WHERE id = $1`,
-        [fk_servicio]
-      );
-      if (!servicioRows?.length) {
-        return NextResponse.json(
-          { error: "El servicio especificado no existe" },
-          { status: 404 }
-        );
-      }
-    }
-
-    // Usar INSERT ... ON CONFLICT para actualizar si ya existe
-    await pool.query(
-      `
-      INSERT INTO lista_deseo (fk_cliente, fk_lugar, fk_servicio)
-      VALUES ($1, $2, $3)
-      ON CONFLICT (fk_cliente) 
-      DO UPDATE SET 
-        fk_lugar = EXCLUDED.fk_lugar,
-        fk_servicio = EXCLUDED.fk_servicio
-      `,
-      [clienteId, fk_lugar || null, fk_servicio || null]
-    );
 
     return NextResponse.json({ 
       ok: true, 
@@ -166,10 +167,12 @@ export async function POST(req: Request) {
     console.error("Error actualizando lista de deseos:", e);
     
     // Capturar errores de BD y traducirlos
+    // La función listar_deseos ya maneja validaciones y lanza excepciones claras
     let errorMessage = "Error actualizando lista de deseos";
     if (e.code === '23503') { // Foreign key violation
-      errorMessage = "Uno de los IDs proporcionados (lugar o servicio) no existe en la base de datos";
+      errorMessage = "Uno de los IDs proporcionados (cliente, lugar o servicio) no existe en la base de datos";
     } else if (e.message) {
+      // La función listar_deseos lanza excepciones con mensajes claros
       errorMessage = e.message;
     }
 

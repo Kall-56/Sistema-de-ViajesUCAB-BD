@@ -22,13 +22,16 @@ type PromocionAPI = {
   servicio_nombre: string;
   descripcion: string;
   costo_servicio: number;
+  costo_servicio_bs?: number;
   denominacion: string;
   millas_otorgadas: number;
   tipo_servicio: string;
   lugar_nombre: string | null;
   nombre_proveedor: string | null;
   precio_con_descuento: number;
+  precio_con_descuento_bs?: number;
   ahorro: number;
+  ahorro_bs?: number;
   dias_restantes: number | null;
   imagen_principal: string | null;
 };
@@ -41,11 +44,15 @@ type PromocionDisplay = {
   discount: string;
   discountPercent: number;
   originalPrice: number;
+  originalPrice_bs?: number;
   price: number;
+  price_bs?: number;
+  denominacion?: string;
   miles: number;
   validUntil: string | null;
   daysLeft: number | null;
   savings: number;
+  savings_bs?: number;
   image: string | null;
   type: string;
   isHotDeal: boolean;
@@ -93,16 +100,20 @@ export function PromotionsGrid() {
             discount: `${p.porcentaje_descuento}% OFF`,
             discountPercent: p.porcentaje_descuento,
             originalPrice: p.costo_servicio,
+            originalPrice_bs: p.costo_servicio_bs || (p.precio_con_descuento_bs ? p.costo_servicio * (p.precio_con_descuento_bs / p.precio_con_descuento) : undefined),
             price: p.precio_con_descuento,
+            price_bs: p.precio_con_descuento_bs || p.precio_con_descuento,
+            denominacion: p.denominacion || "USD",
             miles: p.millas_otorgadas,
             validUntil: p.fecha_vencimiento,
             daysLeft: p.dias_restantes,
             savings: p.ahorro,
+            savings_bs: p.ahorro_bs || p.ahorro,
             image: p.imagen_principal,
             type: tipoMap[p.tipo_servicio] || p.tipo_servicio,
-            isHotDeal: p.porcentaje_descuento >= 30, // Hot deal si descuento >= 30%
-            servicioId: p.servicio_id, // Guardar servicio_id directamente
-            descuentoId: p.descuento_id // Guardar descuento_id directamente
+            isHotDeal: p.porcentaje_descuento >= 30,
+            servicioId: p.servicio_id,
+            descuentoId: p.descuento_id
           };
         });
         
@@ -395,20 +406,56 @@ export function PromotionsGrid() {
                 {/* Pricing */}
                 <div className="mb-4 border-t pt-4">
                   <div className="mb-2 flex items-center gap-2">
-                    <span className="text-lg text-muted-foreground line-through">
-                      ${promo.originalPrice.toLocaleString()}
-                    </span>
-                    <Badge
-                      variant="secondary"
-                      className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100"
-                    >
-                      Ahorras ${promo.savings}
-                    </Badge>
+                    {promo.denominacion === "VEN" ? (
+                      <>
+                        {promo.originalPrice_bs && (
+                          <span className="text-lg text-muted-foreground line-through">
+                            Bs. {promo.originalPrice_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
+                        )}
+                        <Badge
+                          variant="secondary"
+                          className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100"
+                        >
+                          Ahorras Bs. {promo.savings_bs?.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || promo.savings.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </Badge>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-lg text-muted-foreground line-through">
+                          {promo.denominacion === "USD" ? "$" : promo.denominacion === "EUR" ? "€" : ""}
+                          {promo.originalPrice.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
+                        <Badge
+                          variant="secondary"
+                          className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-100"
+                        >
+                          Ahorras {promo.denominacion === "USD" ? "$" : promo.denominacion === "EUR" ? "€" : ""}
+                          {promo.savings.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </Badge>
+                      </>
+                    )}
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-[#E91E63]">${promo.price.toLocaleString()}</span>
-                    <span className="text-sm text-muted-foreground">USD</span>
+                    <span className="text-2xl font-bold text-[#E91E63]">
+                      {promo.denominacion === "VEN" 
+                        ? `Bs. ${promo.price_bs?.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || promo.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                        : promo.denominacion === "USD"
+                        ? `$${promo.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                        : promo.denominacion === "EUR"
+                        ? `€${promo.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                        : `${promo.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} ${promo.denominacion || "USD"}`
+                      }
+                    </span>
+                    {promo.denominacion && promo.denominacion !== "VEN" && (
+                      <span className="text-sm text-muted-foreground">{promo.denominacion}</span>
+                    )}
                   </div>
+                  {promo.denominacion && promo.denominacion !== "VEN" && promo.price_bs && (
+                    <p className="text-xs text-muted-foreground">
+                      Bs. {promo.price_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-muted-foreground">o {promo.miles.toLocaleString()} millas</p>
                 </div>
 

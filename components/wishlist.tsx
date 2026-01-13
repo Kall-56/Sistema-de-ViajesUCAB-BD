@@ -24,7 +24,9 @@ interface WishlistItem {
   servicio_nombre: string | null
   servicio_descripcion: string | null
   servicio_costo: number | null
+  servicio_costo_bs?: number | null
   servicio_denominacion: string | null
+  servicio_denominacion_original?: string | null
   servicio_imagen: string | null
 }
 
@@ -251,8 +253,20 @@ export function Wishlist() {
               {deseos.servicio_costo !== null && (
                 <div className="mb-4">
                   <div className="text-2xl font-bold text-primary">
-                    {formatCurrency(deseos.servicio_costo, deseos.servicio_denominacion)}
+                    {deseos.servicio_denominacion === "VEN" 
+                      ? `Bs. ${deseos.servicio_costo_bs?.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || deseos.servicio_costo.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                      : deseos.servicio_denominacion === "USD"
+                      ? `$${deseos.servicio_costo.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                      : deseos.servicio_denominacion === "EUR"
+                      ? `€${deseos.servicio_costo.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                      : formatCurrency(deseos.servicio_costo, deseos.servicio_denominacion)
+                    }
                   </div>
+                  {deseos.servicio_denominacion && deseos.servicio_denominacion !== "VEN" && deseos.servicio_costo_bs && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Bs. {deseos.servicio_costo_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
                 </div>
               )}
 

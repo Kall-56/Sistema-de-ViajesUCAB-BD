@@ -16,7 +16,23 @@ export async function GET() {
         s.tipo_servicio,
         l.nombre AS lugar_nombre,
         p.nombre_proveedor,
-        (SELECT i.link FROM imagen i WHERE i.fk_servicio = s.id LIMIT 1) AS imagen_principal
+        (SELECT i.link FROM imagen i WHERE i.fk_servicio = s.id LIMIT 1) AS imagen_principal,
+        -- Calcular precio convertido a Bs
+        CASE 
+          WHEN s.denominacion != 'VEN' THEN
+            s.costo_servicio * 
+            COALESCE(
+              (SELECT cantidad_cambio 
+               FROM cambio_moneda 
+               WHERE denominacion = s.denominacion 
+                 AND fecha_fin IS NULL 
+               ORDER BY fecha_inicio DESC 
+               LIMIT 1), 
+              1
+            )
+          ELSE
+            s.costo_servicio
+        END AS costo_servicio_bs
       FROM servicio s
       LEFT JOIN lugar l ON l.id = s.fk_lugar
       LEFT JOIN proveedor p ON p.id = s.fk_proveedor

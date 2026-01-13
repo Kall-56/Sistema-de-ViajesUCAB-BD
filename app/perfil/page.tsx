@@ -1,13 +1,28 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+"use client"
 
-import { Header } from "@/components/header";
-import { Footer } from "@/components/footer";
-import { DashboardContent } from "@/components/dashboard-content";
+import { useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
+import { DashboardContent } from "@/components/dashboard-content"
 
 export default function PerfilPage() {
-  const c = cookies().get("viajesucab_session")?.value;
-  if (!c) redirect("/login");
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const r = await fetch("/api/auth/me", { cache: "no-store" })
+        if (!r.ok) {
+          router.push("/login")
+        }
+      } catch (err) {
+        router.push("/login")
+      }
+    }
+    checkAuth()
+  }, [router])
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -17,5 +32,5 @@ export default function PerfilPage() {
       </main>
       <Footer />
     </div>
-  );
+  )
 }

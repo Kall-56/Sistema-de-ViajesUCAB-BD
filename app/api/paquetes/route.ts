@@ -18,13 +18,42 @@ export async function GET() {
         (SELECT array_agg(s.nombre) FROM paquete_servicio ps 
          JOIN servicio s ON s.id = ps.fk_servicio 
          WHERE ps.fk_paquete = p.id) AS nombres_servicios,
-        -- Array de restricciones
-        (SELECT array_agg(r.descripcion) FROM restriccion r WHERE r.fk_paquete = p.id) AS restricciones,
-        -- Calcular precio total del paquete (suma de servicios)
+        -- Array de restricciones (formato: caracteristica operador valor)
+        (SELECT array_agg(
+          r.caracteristica || ' ' || r.operador || ' ' || r.valor_restriccion
+        ) FROM restriccion r WHERE r.fk_paquete = p.id) AS restricciones,
+        -- Calcular precio total del paquete (suma de servicios) en moneda original
         (SELECT COALESCE(SUM(s.costo_servicio), 0) 
          FROM paquete_servicio ps 
          JOIN servicio s ON s.id = ps.fk_servicio 
          WHERE ps.fk_paquete = p.id) AS precio_total,
+        -- Obtener denominación del paquete (la del primer servicio, o la más común)
+        (SELECT s.denominacion 
+         FROM paquete_servicio ps 
+         JOIN servicio s ON s.id = ps.fk_servicio 
+         WHERE ps.fk_paquete = p.id 
+         LIMIT 1) AS denominacion,
+        -- Calcular precio total convertido a Bs
+        (SELECT COALESCE(SUM(
+          CASE 
+            WHEN s.denominacion != 'VEN' THEN
+              s.costo_servicio * 
+              COALESCE(
+                (SELECT cantidad_cambio 
+                 FROM cambio_moneda 
+                 WHERE denominacion = s.denominacion 
+                   AND fecha_fin IS NULL 
+                 ORDER BY fecha_inicio DESC 
+                 LIMIT 1), 
+                1
+              )
+            ELSE
+              s.costo_servicio
+          END
+        ), 0) 
+         FROM paquete_servicio ps 
+         JOIN servicio s ON s.id = ps.fk_servicio 
+         WHERE ps.fk_paquete = p.id) AS precio_total_bs,
         -- Calcular millas totales
         (SELECT COALESCE(SUM(s.millas_otorgadas), 0) 
          FROM paquete_servicio ps 
@@ -52,6 +81,7 @@ export async function GET() {
 
     return NextResponse.json({ paquetes: rows });
   } catch (e: any) {
+    console.error("Error obteniendo paquetes:", e);
     return NextResponse.json(
       { error: e?.message ?? "Error obteniendo paquetes" },
       { status: 500 }

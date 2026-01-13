@@ -24,16 +24,17 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-interface Cancellation {
-  id: string
-  bookingId: string
-  customerName: string
-  service: string
-  amount: number
-  penalty: number
-  refund: number
-  status: "pending" | "approved" | "rejected"
-  requestDate: string
+interface Reembolso {
+  id_reembolso: number
+  monto_reembolso: number
+  fk_venta: number
+  monto_original: number
+  nombre_cliente: string
+  ci_cliente: number
+  estado_venta: string
+  fecha_reembolso: string
+  fecha_viaje: string | null
+  penalizacion?: number
 }
 
 interface Claim {
@@ -76,33 +77,8 @@ export function PostsaleManagement() {
   const [claims, setClaims] = useState<Claim[]>([])
   const [surveys, setSurveys] = useState<Survey[]>([])
   const [estados, setEstados] = useState<Estado[]>([])
+  const [reembolsos, setReembolsos] = useState<Reembolso[]>([])
   const [updatingClaim, setUpdatingClaim] = useState<number | null>(null)
-
-  // Cancelaciones hardcodeadas (no hay API aún)
-  const cancellations: Cancellation[] = [
-    {
-      id: "1",
-      bookingId: "BK-2025-001",
-      customerName: "Juan Pérez",
-      service: "Paquete Caribe 7 noches",
-      amount: 1299,
-      penalty: 129.9,
-      refund: 1169.1,
-      status: "pending",
-      requestDate: "2025-02-10",
-    },
-    {
-      id: "2",
-      bookingId: "BK-2025-045",
-      customerName: "María González",
-      service: "Vuelo CCS-MIA",
-      amount: 450,
-      penalty: 45,
-      refund: 405,
-      status: "approved",
-      requestDate: "2025-02-09",
-    },
-  ]
 
   useEffect(() => {
     loadData()
@@ -111,7 +87,7 @@ export function PostsaleManagement() {
   async function loadData() {
     setLoading(true)
     try {
-      await Promise.all([loadClaims(), loadSurveys(), loadEstados()])
+      await Promise.all([loadClaims(), loadSurveys(), loadEstados(), loadReembolsos()])
     } catch (err) {
       console.error("Error cargando datos:", err)
       toast.error("Error", {
@@ -119,6 +95,27 @@ export function PostsaleManagement() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadReembolsos() {
+    try {
+      const r = await fetch("/api/admin/reembolsos", { cache: "no-store" })
+      const data = await r.json()
+      if (r.ok) {
+        setReembolsos(Array.isArray(data?.reembolsos) ? data.reembolsos : [])
+      } else {
+        if (r.status === 401 || r.status === 403) {
+          router.push("/login?next=/admin")
+          return
+        }
+        throw new Error(data?.error ?? "Error cargando reembolsos")
+      }
+    } catch (err: any) {
+      console.error("Error cargando reembolsos:", err)
+      toast.error("Error", {
+        description: err?.message ?? "No se pudieron cargar los reembolsos",
+      })
     }
   }
 
@@ -278,12 +275,12 @@ export function PostsaleManagement() {
             <TabsTrigger value="surveys">Encuestas</TabsTrigger>
           </TabsList>
 
-          {/* Cancellations Tab */}
+          {/* Cancellations Tab - Solo listar reembolsos */}
           <TabsContent value="cancellations" className="space-y-4 mt-6">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por ID de reserva o cliente..."
+                placeholder="Buscar por ID de venta o cliente..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9"
@@ -294,69 +291,86 @@ export function PostsaleManagement() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>ID Reserva</TableHead>
+                    <TableHead>ID Venta</TableHead>
                     <TableHead>Cliente</TableHead>
-                    <TableHead>Servicio</TableHead>
-                    <TableHead>Monto</TableHead>
-                    <TableHead>Penalización (10%)</TableHead>
-                    <TableHead>Reembolso (90%)</TableHead>
+                    <TableHead>Monto Original</TableHead>
+                    <TableHead>Penalización</TableHead>
+                    <TableHead>Monto Reembolsado</TableHead>
+                    <TableHead>Fecha Reembolso</TableHead>
+                    <TableHead>Fecha Viaje</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {cancellations.length === 0 ? (
+                  {reembolsos.filter((r) =>
+                    r.fk_venta.toString().includes(searchTerm) ||
+                    r.nombre_cliente.toLowerCase().includes(searchTerm.toLowerCase())
+                  ).length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                        No hay cancelaciones pendientes
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                        {reembolsos.length === 0 ? "No hay reembolsos registrados" : "No se encontraron resultados"}
                       </TableCell>
                     </TableRow>
                   ) : (
-                    cancellations.map((cancel) => (
-                      <TableRow key={cancel.id}>
-                        <TableCell className="font-medium">{cancel.bookingId}</TableCell>
-                        <TableCell>{cancel.customerName}</TableCell>
-                        <TableCell className="text-sm">{cancel.service}</TableCell>
-                        <TableCell className="font-medium">${cancel.amount}</TableCell>
-                        <TableCell className="text-red-600">${cancel.penalty.toFixed(2)}</TableCell>
-                        <TableCell className="text-green-600 font-medium">${cancel.refund.toFixed(2)}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              cancel.status === "approved"
-                                ? "default"
-                                : cancel.status === "rejected"
-                                  ? "destructive"
-                                  : "secondary"
-                            }
-                            className={
-                              cancel.status === "approved" ? "bg-green-100 text-green-800 hover:bg-green-100" : ""
-                            }
-                          >
-                            {cancel.status === "pending" && <Clock className="h-3 w-3 mr-1" />}
-                            {cancel.status === "approved" && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                            {cancel.status === "rejected" && <XCircle className="h-3 w-3 mr-1" />}
-                            {cancel.status === "pending"
-                              ? "Pendiente"
-                              : cancel.status === "approved"
-                                ? "Aprobada"
-                                : "Rechazada"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm">
-                              <CheckCircle2 className="h-4 w-4 mr-1" />
-                              Aprobar
+                    reembolsos
+                      .filter((r) =>
+                        r.fk_venta.toString().includes(searchTerm) ||
+                        r.nombre_cliente.toLowerCase().includes(searchTerm.toLowerCase())
+                      )
+                      .map((reembolso) => (
+                        <TableRow key={reembolso.id_reembolso}>
+                          <TableCell className="font-medium">#{reembolso.fk_venta}</TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{reembolso.nombre_cliente}</div>
+                              <div className="text-xs text-muted-foreground">CI: {reembolso.ci_cliente}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            Bs. {Number(reembolso.monto_original).toLocaleString("es-VE", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </TableCell>
+                          <TableCell className="text-green-600 font-medium">
+                            Bs. {Number(reembolso.monto_reembolso).toLocaleString("es-VE", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {new Date(reembolso.fecha_reembolso).toLocaleDateString("es-ES")}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {reembolso.fecha_viaje
+                              ? new Date(reembolso.fecha_viaje).toLocaleDateString("es-ES")
+                              : "N/A"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={
+                              reembolso.estado_venta === "Cancelado" 
+                                ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100"
+                                : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                            }>
+                              {reembolso.estado_venta === "Cancelado" ? (
+                                <Clock className="h-3 w-3 mr-1" />
+                              ) : (
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                              )}
+                              {reembolso.estado_venta}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="outline" size="sm" asChild>
+                              <a href={`/venta/${reembolso.fk_venta}`} target="_blank" rel="noopener noreferrer">
+                                <Eye className="h-4 w-4 mr-1" />
+                                Ver
+                              </a>
                             </Button>
-                            <Button variant="outline" size="sm" className="text-red-600 bg-transparent">
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Rechazar
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                          </TableCell>
+                        </TableRow>
+                      ))
                   )}
                 </TableBody>
               </Table>

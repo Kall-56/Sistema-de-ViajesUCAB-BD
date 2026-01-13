@@ -48,6 +48,19 @@ export function RestriccionesManagement() {
   const [formIdPaquete, setFormIdPaquete] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // Resetear operador cuando cambia la característica
+  useEffect(() => {
+    if (formCaracteristica === "estado_civil") {
+      // Para estado civil, solo permitir igualdad
+      setFormOperador("=")
+    } else if (formCaracteristica === "edad") {
+      // Para edad, si el operador actual no es válido para edad, cambiarlo
+      if (formOperador === "=" || formOperador === "!=") {
+        setFormOperador(">")
+      }
+    }
+  }, [formCaracteristica, formOperador])
+
   useEffect(() => {
     fetchRestricciones()
     fetchPaquetes()
@@ -337,12 +350,26 @@ export function RestriccionesManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value=">">Mayor que (&gt;)</SelectItem>
-                  <SelectItem value="<">Menor que (&lt;)</SelectItem>
-                  <SelectItem value="=">Igual a (=)</SelectItem>
-                  <SelectItem value="!=">Diferente de (!=)</SelectItem>
+                  {formCaracteristica === "edad" ? (
+                    <>
+                      <SelectItem value=">">Mayor que (&gt;)</SelectItem>
+                      <SelectItem value="<">Menor que (&lt;)</SelectItem>
+                      <SelectItem value="=">Igual a (=)</SelectItem>
+                      <SelectItem value="!=">Diferente de (!=)</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="=">Igual a (=)</SelectItem>
+                      <SelectItem value="!=">Diferente de (!=)</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
+              {formCaracteristica === "estado_civil" && (
+                <p className="text-xs text-muted-foreground">
+                  Para estado civil solo se permiten operadores de igualdad (=) o desigualdad (!=)
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

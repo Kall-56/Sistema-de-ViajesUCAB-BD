@@ -102,7 +102,18 @@ export async function GET() {
       JOIN estado e ON e.id = ve.fk_estado
       WHERE v.fk_cliente = $1
         AND ve.fecha_fin IS NULL
-        AND e.nombre != 'pendiente'
+        AND (
+          -- Mostrar todas las ventas excepto las que están completamente pendientes sin pagos
+          e.nombre != 'pendiente'
+          OR EXISTS (
+            -- Incluir ventas pendientes que tienen plan de cuotas activo
+            SELECT 1 FROM plan_cuotas pc WHERE pc.fk_venta = v.id_venta
+          )
+          OR EXISTS (
+            -- Incluir ventas pendientes que tienen al menos un pago registrado
+            SELECT 1 FROM pago p WHERE p.fk_venta = v.id_venta
+          )
+        )
       ORDER BY ve.fecha_inicio DESC
       LIMIT 100
       `,

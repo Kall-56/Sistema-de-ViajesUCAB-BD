@@ -21,15 +21,27 @@ import {
   TrendingUp,
   XCircle,
   Leaf,
+  MessageSquare,
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { ProfileManagement } from "@/components/profile-management"
 import { CancellationsRefunds } from "@/components/cancellations-refunds"
 import { Wishlist } from "@/components/wishlist"
 import { SustainabilityHistory } from "@/components/sustainability-history"
+import { MisViajesList } from "@/components/mis-viajes-list"
+import { ClaimsSurveys } from "@/components/claims-surveys"
 
 export function DashboardContent() {
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState("overview")
+
+  useEffect(() => {
+    const tab = searchParams.get("tab")
+    if (tab && ["overview", "trips", "miles", "wishlist", "sustainability", "notifications", "profile", "cancellations", "reclamos"].includes(tab)) {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
 
   return (
     <div className="bg-muted/30 min-h-screen">
@@ -135,6 +147,14 @@ export function DashboardContent() {
                   >
                     <XCircle className="h-4 w-4" />
                     Cancelaciones
+                  </Button>
+                  <Button
+                    variant={activeTab === "reclamos" ? "secondary" : "ghost"}
+                    className="w-full justify-start gap-3"
+                    onClick={() => setActiveTab("reclamos")}
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    Reclamos
                   </Button>
                   <div className="my-4 border-t" />
                   <Button variant="ghost" className="w-full justify-start gap-3" asChild>
@@ -317,17 +337,7 @@ export function DashboardContent() {
             )}
 
             {/* Trips Tab */}
-            {activeTab === "trips" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Mis Viajes</CardTitle>
-                  <CardDescription>Gestiona tus reservas y viajes próximos</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">Contenido de viajes próximos...</p>
-                </CardContent>
-              </Card>
-            )}
+            {activeTab === "trips" && <MisViajesList />}
 
             {/* History Tab */}
             {activeTab === "history" && (
@@ -469,6 +479,9 @@ export function DashboardContent() {
 
             {/* Cancellations Tab */}
             {activeTab === "cancellations" && <CancellationsRefunds />}
+
+            {/* Reclamos Tab */}
+            {activeTab === "reclamos" && <ClaimsSurveys />}
           </div>
         </div>
       </div>

@@ -263,10 +263,12 @@ export function CuotasCronograma({ idVenta }: CuotasCronogramaProps) {
                   <SelectContent>
                     {metodosPago.map((metodo) => {
                       let label = metodo.tipo_metodo_pago
-                      if (metodo.numero_tarjeta) {
-                        label += ` • ${metodo.numero_tarjeta.slice(-4)}`
+                      if (metodo.tipo_metodo_pago === 'milla') {
+                        label = `Millas (${metodo.cantidad_millas?.toLocaleString("es-VE") || 0} disponibles)`
+                      } else if (metodo.numero_tarjeta) {
+                        label += ` • ${String(metodo.numero_tarjeta).slice(-4)}`
                       } else if (metodo.numero_referencia) {
-                        label += ` • Ref: ${metodo.numero_referencia.slice(-4)}`
+                        label += ` • Ref: ${String(metodo.numero_referencia).slice(-4)}`
                       } else if (metodo.numero_cheque) {
                         label += ` • Cheque: ${metodo.numero_cheque}`
                       }

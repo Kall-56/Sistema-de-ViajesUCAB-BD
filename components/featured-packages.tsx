@@ -14,10 +14,13 @@ type PaqueteAPI = {
   descripcion_paquete: string;
   tipo_paquete: string;
   precio_total: number;
+  precio_total_bs?: number;
+  denominacion?: string;
   millas_totales: number;
   imagen_principal: string | null;
   destinos: string[] | null;
   nombres_servicios: string[] | null;
+  ids_servicios: number[] | null;
 };
 
 type PaqueteDisplay = {
@@ -27,13 +30,17 @@ type PaqueteDisplay = {
   description: string;
   duration: string;
   price: number;
+  price_bs?: number;
+  denominacion?: string;
   originalPrice: number;
+  originalPrice_bs?: number;
   miles: number;
   rating: number;
   reviews: number;
   image: string | null;
   tag: string;
   includes: string[];
+  ids_servicios?: number[] | null;
 };
 
 const featuredPackages = [
@@ -110,6 +117,8 @@ export function FeaturedPackages() {
             
             const tags = ["Más Popular", "Mejor Valorado", "Ideal Familias"]
             
+            const precioOriginal = Math.round((p.precio_total || 0) * 1.3);
+            const precioOriginalBs = p.precio_total_bs ? Math.round(p.precio_total_bs * 1.3) : undefined;
             return {
               id: `paquete-${p.id_paquete}`,
               name: p.nombre_paquete,
@@ -117,13 +126,17 @@ export function FeaturedPackages() {
               description: p.descripcion_paquete || "Sin descripción",
               duration: "Duración variable",
               price: p.precio_total || 0,
-              originalPrice: Math.round((p.precio_total || 0) * 1.3), // Simular precio original
+              price_bs: p.precio_total_bs || p.precio_total || 0,
+              denominacion: p.denominacion || "USD",
+              originalPrice: precioOriginal,
+              originalPrice_bs: precioOriginalBs,
               miles: p.millas_totales || 0,
-              rating: 4.5 + (idx * 0.1), // Placeholder
-              reviews: 100 + (idx * 50), // Placeholder
+              rating: 4.5 + (idx * 0.1),
+              reviews: 100 + (idx * 50),
               image: p.imagen_principal,
               tag: tags[idx] || "Destacado",
-              includes: p.nombres_servicios || []
+              includes: p.nombres_servicios || [],
+              ids_servicios: p.ids_servicios
             };
           })
         
@@ -172,7 +185,16 @@ export function FeaturedPackages() {
                   className="h-64 w-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
                 <Badge className="absolute left-4 top-4 bg-[#E91E63] text-white border-0">{pkg.tag}</Badge>
-                {/* Wishlist no disponible para paquetes (solo servicio o lugar en BD) */}
+                {pkg.ids_servicios && pkg.ids_servicios.length > 0 && (
+                  <div className="absolute top-3 right-3 z-10">
+                    <WishlistButton
+                      itemId={pkg.ids_servicios[0]}
+                      itemName={pkg.name}
+                      itemType="servicio"
+                      variant="icon"
+                    />
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
 
@@ -207,11 +229,37 @@ export function FeaturedPackages() {
 
                 <div className="mb-4 border-t pt-4">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-sm text-muted-foreground line-through">
-                      ${pkg.originalPrice.toLocaleString()}
-                    </span>
-                    <span className="text-2xl font-bold text-[#E91E63]">${pkg.price.toLocaleString()}</span>
+                    {pkg.denominacion === "VEN" ? (
+                      <>
+                        {pkg.originalPrice_bs && (
+                          <span className="text-sm text-muted-foreground line-through">
+                            Bs. {pkg.originalPrice_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
+                        )}
+                        <span className="text-2xl font-bold text-[#E91E63]">
+                          Bs. {pkg.price_bs?.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || pkg.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        {pkg.originalPrice && (
+                          <span className="text-sm text-muted-foreground line-through">
+                            {pkg.denominacion === "USD" ? "$" : pkg.denominacion === "EUR" ? "€" : ""}
+                            {pkg.originalPrice.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
+                        )}
+                        <span className="text-2xl font-bold text-[#E91E63]">
+                          {pkg.denominacion === "USD" ? "$" : pkg.denominacion === "EUR" ? "€" : ""}
+                          {pkg.price.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
+                      </>
+                    )}
                   </div>
+                  {pkg.denominacion && pkg.denominacion !== "VEN" && pkg.price_bs && (
+                    <p className="text-xs text-muted-foreground">
+                      Bs. {pkg.price_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </p>
+                  )}
                   <p className="mt-1 text-xs text-muted-foreground">o {pkg.miles.toLocaleString()} millas</p>
                 </div>
 

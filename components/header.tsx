@@ -19,6 +19,7 @@ import {
   ShoppingCart,
   Route,
   MessageSquare,
+  Heart,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -186,6 +187,16 @@ export function Header() {
                 <Route className="h-4 w-4 shrink-0" />
                 <span className="hidden lg:inline">Mi Itinerario</span>
               </Link>
+
+              {sessionUser && (
+                <Link
+                  href="/perfil?tab=wishlist"
+                  className="flex items-center gap-1.5 px-2 lg:px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#E91E63] whitespace-nowrap shrink-0"
+                >
+                  <Heart className="h-4 w-4 shrink-0" />
+                  <span className="hidden lg:inline">Lista de Deseos</span>
+                </Link>
+              )}
 
               {/* Perfil: solo si hay sesión; si no, lleva a login */}
               <Link

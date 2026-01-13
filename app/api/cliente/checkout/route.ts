@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     const { ventas } = body as {
       ventas: Array<{
         id_venta: number;
-        metodo_pago: string; // 'tarjeta' | 'deposito' | 'billetera' | 'cheque' | 'cripto'
+        metodo_pago: string; // 'tarjeta' | 'deposito' | 'billetera' | 'cheque' | 'cripto' | 'milla'
         datos_metodo_pago: any; // Datos específicos según el método
         monto_pago: number; // Monto a pagar en Bs
         denominacion: string; // 'VEN' u otra
@@ -37,6 +37,7 @@ export async function POST(req: Request) {
           num_cuotas: number;
           tasa_interes: number;
         };
+        usar_millas?: number; // Cantidad de millas a usar
       }>;
     };
 
@@ -110,8 +111,104 @@ export async function POST(req: Request) {
 
         // 2. Crear o obtener método de pago según el tipo
         let id_metodo_pago: number;
+        const usar_millas = ventaData.usar_millas || 0;
 
-        if (metodo_pago === "tarjeta") {
+        if (metodo_pago === "milla") {
+          // Obtener el método de pago de millas del cliente
+          const { rows: millasRows } = await pool.query(
+            `SELECT id_metodo_pago, cantidad_millas FROM metodo_pago WHERE fk_cliente = $1 AND tipo_metodo_pago = 'milla' LIMIT 1`,
+            [clienteId]
+          );
+
+          if (!millasRows?.length) {
+            resultados.push({
+              id_venta,
+              exito: false,
+              error: "No tienes un método de pago con millas configurado",
+            });
+            continue;
+          }
+
+          const millasData = millasRows[0];
+          const millasDisponibles = Number(millasData.cantidad_millas) || 0;
+          const millasAUsar = usar_millas || 0;
+
+          if (millasAUsar > millasDisponibles) {
+            resultados.push({
+              id_venta,
+              exito: false,
+              error: `No tienes suficientes millas. Disponibles: ${millasDisponibles}, solicitadas: ${millasAUsar}`,
+            });
+            continue;
+          }
+
+          id_metodo_pago = millasData.id_metodo_pago;
+
+          // Restar millas del saldo del cliente
+          await pool.query(
+            `UPDATE metodo_pago SET cantidad_millas = cantidad_millas - $1 WHERE id_metodo_pago = $2 AND fk_cliente = $3`,
+            [millasAUsar, id_metodo_pago, clienteId]
+          );
+
+          // Registrar transacción de millas en sistema_milla
+          await pool.query(
+            `INSERT INTO sistema_milla (cantidad_millas, fecha, tipo_transaccion, fk_metodo_pago, fk_cliente, descripcion) VALUES ($1, CURRENT_DATE, 'debito', $2, $3, 'Pago de venta #' || $4)`,
+            [millasAUsar, id_metodo_pago, clienteId, id_venta]
+          );
+
+          // Si hay un método adicional (combinación de millas + otro método)
+          if (datos_metodo_pago?.metodo_adicional && datos_metodo_pago?.datos_metodo_adicional && monto_pago > 0) {
+            // Crear método adicional para el resto
+            const metodoAdicional = datos_metodo_pago.metodo_adicional;
+            const datosAdicional = datos_metodo_pago.datos_metodo_adicional;
+            
+            // Crear método de pago adicional según tipo
+            if (metodoAdicional === "tarjeta") {
+              const { rows: metodoRows } = await pool.query(
+                `SELECT insertar_metodo_pago_tarjeta($1, $2, $3, $4, $5, $6, $7) AS id_metodo_pago`,
+                [
+                  clienteId,
+                  datosAdicional.numero_tarjeta,
+                  datosAdicional.codigo_seguridad || null,
+                  datosAdicional.fecha_vencimiento || null,
+                  datosAdicional.titular,
+                  datosAdicional.emisor || null,
+                  datosAdicional.fk_banco || null,
+                ]
+              );
+              id_metodo_pago = metodoRows[0]?.id_metodo_pago;
+            } else if (metodoAdicional === "deposito") {
+              const { rows: metodoRows } = await pool.query(
+                `SELECT insertar_metodo_pago_deposito($1, $2, $3, $4) AS id_metodo_pago`,
+                [
+                  clienteId,
+                  datosAdicional.numero_referencia,
+                  datosAdicional.numero_cuenta_destino || null,
+                  datosAdicional.fk_banco || null,
+                ]
+              );
+              id_metodo_pago = metodoRows[0]?.id_metodo_pago;
+            } else if (metodoAdicional === "billetera") {
+              const { rows: metodoRows } = await pool.query(
+                `SELECT insertar_metodo_pago_billetera($1, $2, $3, $4) AS id_metodo_pago`,
+                [clienteId, datosAdicional.numero_confirmacion, datosAdicional.fk_tbd || null, datosAdicional.fk_banco || null]
+              );
+              id_metodo_pago = metodoRows[0]?.id_metodo_pago;
+            } else if (metodoAdicional === "cheque") {
+              const { rows: metodoRows } = await pool.query(
+                `SELECT insertar_metodo_pago_cheque($1, $2, $3, $4) AS id_metodo_pago`,
+                [clienteId, datosAdicional.codigo_cuenta || null, datosAdicional.numero_cheque, datosAdicional.fk_banco || null]
+              );
+              id_metodo_pago = metodoRows[0]?.id_metodo_pago;
+            } else if (metodoAdicional === "cripto") {
+              const { rows: metodoRows } = await pool.query(
+                `SELECT insertar_metodo_pago_cripto($1, $2, $3) AS id_metodo_pago`,
+                [clienteId, datosAdicional.nombre_criptomoneda, datosAdicional.direccion_billetera]
+              );
+              id_metodo_pago = metodoRows[0]?.id_metodo_pago;
+            }
+          }
+        } else if (metodo_pago === "tarjeta") {
           const {
             numero_tarjeta,
             codigo_seguridad,
@@ -284,20 +381,62 @@ export async function POST(req: Request) {
 
             // Pagar la primera cuota usando función pagar_cuota
             // Firma: pagar_cuota(i_id_cuota, monto, i_fk_metodo_pago, i_denominacion)
-            const { rows: pagarCuotaRows } = await pool.query(
-              `SELECT pagar_cuota($1, $2, $3, $4) AS resultado`,
-              [
-                primeraCuota.id_cuota,
-                montoCuota,
-                id_metodo_pago,
-                denominacion || "VEN",
-              ]
-            );
+            try {
+              const { rows: pagarCuotaRows } = await pool.query(
+                `SELECT pagar_cuota($1, $2, $3, $4) AS resultado`,
+                [
+                  primeraCuota.id_cuota,
+                  montoCuota,
+                  id_metodo_pago,
+                  denominacion || "VEN",
+                ]
+              );
 
-            const resultadoPago = pagarCuotaRows[0]?.resultado;
-            
-            if (!resultadoPago || resultadoPago !== 1) {
-              throw new Error("Error pagando primera cuota");
+              const resultadoPago = pagarCuotaRows[0]?.resultado;
+              
+              if (!resultadoPago || resultadoPago !== 1) {
+                throw new Error("Error pagando primera cuota");
+              }
+            } catch (pagarCuotaError: any) {
+              // Manejar error de constraint unique (cuota ya pagada)
+              if (pagarCuotaError.code === '23505' && pagarCuotaError.constraint === 'cuo_ecuo_pkey') {
+                // La cuota ya tiene el estado pagado, verificar si realmente está pagada
+                const { rows: estadoCuotaRows } = await pool.query(
+                  `
+                  SELECT e.nombre AS estado
+                  FROM cuo_ecuo ce
+                  JOIN estado e ON e.id = ce.fk_estado
+                  WHERE ce.fk_cuota = $1 AND ce.fecha_fin IS NULL
+                  `,
+                  [primeraCuota.id_cuota]
+                );
+                
+                if (estadoCuotaRows[0]?.estado === 'Pagado') {
+                  // La cuota ya está pagada, obtener el pago existente
+                  const { rows: pagoExistenteRows } = await pool.query(
+                    `
+                    SELECT id_pago 
+                    FROM pago 
+                    WHERE fk_venta = $1 
+                      AND fecha_hora >= CURRENT_TIMESTAMP - INTERVAL '1 hour'
+                    ORDER BY id_pago DESC 
+                    LIMIT 1
+                    `,
+                    [id_venta]
+                  );
+                  
+                  if (pagoExistenteRows[0]?.id_pago) {
+                    id_pago = pagoExistenteRows[0].id_pago;
+                    // Continuar sin error, la cuota ya fue pagada
+                  } else {
+                    throw new Error("La cuota ya está pagada pero no se encontró el pago asociado");
+                  }
+                } else {
+                  throw new Error("Error al pagar la cuota: estado duplicado");
+                }
+              } else {
+                throw pagarCuotaError;
+              }
             }
 
             // Obtener el ID del pago creado por registrar_pago dentro de pagar_cuota

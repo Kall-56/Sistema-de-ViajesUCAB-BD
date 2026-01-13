@@ -33,6 +33,7 @@ export async function GET() {
         mp.numero_cheque,
         mp.nombre_criptomoneda,
         mp.direccion_billetera,
+        mp.cantidad_millas,
         b.nombre_banco
       FROM metodo_pago mp
       LEFT JOIN banco b ON b.id_banco = mp.fk_banco
