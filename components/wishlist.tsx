@@ -17,6 +17,7 @@ import {
 import Link from "next/link"
 
 interface WishlistItem {
+  id: number
   fk_cliente: number
   fk_lugar: number | null
   fk_servicio: number | null
@@ -33,9 +34,9 @@ interface WishlistItem {
 export function Wishlist() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [removing, setRemoving] = useState(false)
-  const [addingToCart, setAddingToCart] = useState(false)
-  const [deseos, setDeseos] = useState<WishlistItem | null>(null)
+  const [removing, setRemoving] = useState<number | null>(null)
+  const [addingToCart, setAddingToCart] = useState<number | null>(null)
+  const [deseos, setDeseos] = useState<WishlistItem[]>([])
 
   useEffect(() => {
     loadWishlist()
@@ -48,10 +49,10 @@ export function Wishlist() {
       const data = await r.json()
       
       if (r.ok) {
-        if (data.deseos) {
+        if (Array.isArray(data.deseos)) {
           setDeseos(data.deseos)
         } else {
-          setDeseos(null)
+          setDeseos([])
         }
       } else {
         if (r.status === 401 || r.status === 403) {
@@ -65,25 +66,25 @@ export function Wishlist() {
       toast.error("Error", {
         description: err.message ?? "No se pudo cargar la lista de deseos",
       })
-      setDeseos(null)
+      setDeseos([])
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleRemoveItem() {
-    if (removing) return
+  async function handleRemoveItem(itemId: number) {
+    if (removing === itemId) return
 
-    setRemoving(true)
+    setRemoving(itemId)
     try {
-      const r = await fetch("/api/cliente/deseos", {
+      const r = await fetch(`/api/cliente/deseos?id=${itemId}`, {
         method: "DELETE",
       })
 
       const data = await r.json()
 
       if (r.ok) {
-        setDeseos(null)
+        setDeseos(prev => prev.filter(d => d.id !== itemId))
         toast.success("Item eliminado de la lista de deseos")
       } else {
         throw new Error(data?.error ?? "Error eliminando de lista de deseos")
@@ -94,14 +95,14 @@ export function Wishlist() {
         description: err.message ?? "No se pudo eliminar de la lista de deseos",
       })
     } finally {
-      setRemoving(false)
+      setRemoving(null)
     }
   }
 
-  async function handleAddToCart() {
-    if (!deseos?.fk_servicio || addingToCart) return
+  async function handleAddToCart(item: WishlistItem) {
+    if (!item.fk_servicio || addingToCart === item.id) return
 
-    setAddingToCart(true)
+    setAddingToCart(item.id)
     try {
       const ventaRes = await fetch("/api/cliente/ventas", {
         method: "POST",
@@ -129,7 +130,7 @@ export function Wishlist() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id_venta: idVenta,
-          id_servicio: deseos.fk_servicio,
+          id_servicio: item.fk_servicio,
           fecha_inicio: fechaInicio.toISOString().split('T')[0],
           aplicar_descuento: false,
         }),
@@ -151,7 +152,7 @@ export function Wishlist() {
         description: err.message ?? "No se pudo agregar el servicio al carrito",
       })
     } finally {
-      setAddingToCart(false)
+      setAddingToCart(null)
     }
   }
 
@@ -174,7 +175,7 @@ export function Wishlist() {
     )
   }
 
-  if (!deseos) {
+  if (deseos.length === 0) {
     return (
       <div className="py-16">
         <Card className="p-12 text-center">
@@ -201,84 +202,84 @@ export function Wishlist() {
       <div className="mb-8">
         <h2 className="text-2xl font-bold">Mi Lista de Deseos</h2>
         <p className="mt-2 text-muted-foreground">
-          {deseos ? "1 item guardado" : "0 items guardados"}
+          {deseos.length} {deseos.length === 1 ? "item guardado" : "items guardados"}
         </p>
       </div>
 
-      {deseos && (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <Card className="group overflow-hidden">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {deseos.map((deseo) => (
+          <Card key={deseo.id} className="group overflow-hidden">
             <div className="relative">
               <img 
-                src={deseos.servicio_imagen || "/placeholder.svg"} 
-                alt={deseos.servicio_nombre || deseos.lugar_nombre || "Item"} 
+                src={deseo.servicio_imagen || "/placeholder.svg"} 
+                alt={deseo.servicio_nombre || deseo.lugar_nombre || "Item"} 
                 className="h-48 w-full object-cover" 
               />
               <Button
                 size="icon"
                 variant="secondary"
                 className="absolute right-2 top-2 h-9 w-9 bg-white/90 hover:bg-white"
-                onClick={handleRemoveItem}
-                disabled={removing}
+                onClick={() => handleRemoveItem(deseo.id)}
+                disabled={removing === deseo.id}
               >
-                {removing ? (
+                {removing === deseo.id ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <Trash2 className="h-5 w-5 text-red-600" />
                 )}
               </Button>
               <Badge className="absolute bottom-2 left-2 bg-background/90 text-foreground">
-                {deseos.fk_servicio ? "Servicio" : "Lugar"}
+                {deseo.fk_servicio ? "Servicio" : "Lugar"}
               </Badge>
             </div>
 
             <div className="p-5">
               <h3 className="mb-2 text-lg font-bold leading-tight">
-                {deseos.servicio_nombre || deseos.lugar_nombre || "Item sin nombre"}
+                {deseo.servicio_nombre || deseo.lugar_nombre || "Item sin nombre"}
               </h3>
               
-              {deseos.lugar_nombre && (
+              {deseo.lugar_nombre && (
                 <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
                   <MapPin className="h-4 w-4" />
-                  <span>{deseos.lugar_nombre}</span>
+                  <span>{deseo.lugar_nombre}</span>
                 </div>
               )}
 
-              {deseos.servicio_descripcion && (
+              {deseo.servicio_descripcion && (
                 <p className="mb-3 text-sm text-muted-foreground line-clamp-2">
-                  {deseos.servicio_descripcion}
+                  {deseo.servicio_descripcion}
                 </p>
               )}
 
-              {deseos.servicio_costo !== null && (
+              {deseo.servicio_costo !== null && (
                 <div className="mb-4">
                   <div className="text-2xl font-bold text-primary">
-                    {deseos.servicio_denominacion === "VEN" 
-                      ? `Bs. ${deseos.servicio_costo_bs?.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || deseos.servicio_costo.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                      : deseos.servicio_denominacion === "USD"
-                      ? `$${deseos.servicio_costo.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                      : deseos.servicio_denominacion === "EUR"
-                      ? `€${deseos.servicio_costo.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                      : formatCurrency(deseos.servicio_costo, deseos.servicio_denominacion)
+                    {deseo.servicio_denominacion === "VEN" 
+                      ? `Bs. ${deseo.servicio_costo_bs?.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || deseo.servicio_costo.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                      : deseo.servicio_denominacion === "USD"
+                      ? `$${deseo.servicio_costo.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                      : deseo.servicio_denominacion === "EUR"
+                      ? `€${deseo.servicio_costo.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                      : formatCurrency(deseo.servicio_costo, deseo.servicio_denominacion)
                     }
                   </div>
-                  {deseos.servicio_denominacion && deseos.servicio_denominacion !== "VEN" && deseos.servicio_costo_bs && (
+                  {deseo.servicio_denominacion && deseo.servicio_denominacion !== "VEN" && deseo.servicio_costo_bs && (
                     <p className="text-sm text-muted-foreground mt-1">
-                      Bs. {deseos.servicio_costo_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                      Bs. {deseo.servicio_costo_bs.toLocaleString("es-VE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                     </p>
                   )}
                 </div>
               )}
 
               <div className="space-y-2">
-                {deseos.fk_servicio && (
+                {deseo.fk_servicio && (
                   <>
                     <Button 
                       className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90"
-                      onClick={handleAddToCart}
-                      disabled={addingToCart}
+                      onClick={() => handleAddToCart(deseo)}
+                      disabled={addingToCart === deseo.id}
                     >
-                      {addingToCart ? (
+                      {addingToCart === deseo.id ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Agregando...
@@ -291,15 +292,15 @@ export function Wishlist() {
                       )}
                     </Button>
                     <Button asChild variant="outline" className="w-full">
-                      <Link href={`/servicio/${deseos.fk_servicio}`}>
+                      <Link href={`/servicio/${deseo.fk_servicio}`}>
                         Ver Detalles
                       </Link>
                     </Button>
                   </>
                 )}
-                {deseos.fk_lugar && (
+                {deseo.fk_lugar && (
                   <Button asChild className="w-full bg-[#E91E63] hover:bg-[#E91E63]/90">
-                    <Link href={`/buscar?lugar=${deseos.fk_lugar}`}>
+                    <Link href={`/buscar?lugar=${deseo.fk_lugar}`}>
                       <ShoppingCart className="mr-2 h-4 w-4" />
                       Explorar Servicios
                     </Link>
@@ -308,8 +309,8 @@ export function Wishlist() {
                 <Button 
                   variant="outline" 
                   className="w-full bg-transparent"
-                  onClick={handleRemoveItem}
-                  disabled={removing}
+                  onClick={() => handleRemoveItem(deseo.id)}
+                  disabled={removing === deseo.id}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Eliminar de Lista
@@ -317,8 +318,8 @@ export function Wishlist() {
               </div>
             </div>
           </Card>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   )
 }

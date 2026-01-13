@@ -7,8 +7,8 @@ import { requireCliente } from "@/lib/require-admin";
  * 
  * Obtener la lista de deseos del cliente.
  * 
- * Nota: La tabla lista_deseo tiene PK en fk_cliente (solo UN registro por cliente).
- * Puede contener fk_lugar O fk_servicio (no ambos).
+ * Nota: La tabla lista_deseo ahora permite múltiples registros por cliente.
+ * Cada registro puede contener fk_lugar O fk_servicio (no ambos).
  */
 export async function GET() {
   const auth = requireCliente();
@@ -22,6 +22,7 @@ export async function GET() {
     const { rows } = await pool.query(
       `
       SELECT 
+        ld.id,
         ld.fk_cliente,
         ld.fk_lugar,
         ld.fk_servicio,
@@ -75,19 +76,15 @@ export async function GET() {
       LEFT JOIN lugar l ON l.id = ld.fk_lugar
       LEFT JOIN servicio s ON s.id = ld.fk_servicio
       WHERE ld.fk_cliente = $1
+      ORDER BY ld.id DESC
       `,
       [clienteId]
     );
 
-    if (!rows?.length) {
-      return NextResponse.json({ 
-        deseos: null,
-        message: "No tienes items en tu lista de deseos"
-      });
-    }
-
-    const deseo = rows[0];
-    return NextResponse.json({ deseos: deseo });
+    return NextResponse.json({ 
+      deseos: rows || [],
+      message: rows?.length ? `${rows.length} item(s) en tu lista de deseos` : "No tienes items en tu lista de deseos"
+    });
   } catch (e: any) {
     console.error("Error obteniendo lista de deseos:", e);
     return NextResponse.json(
@@ -100,13 +97,13 @@ export async function GET() {
 /**
  * POST /api/cliente/deseos
  * 
- * Agregar o actualizar item en lista de deseos.
+ * Agregar item a la lista de deseos.
  * 
  * Body:
  * - fk_lugar: ID del lugar (opcional, debe ser null si fk_servicio está presente)
  * - fk_servicio: ID del servicio (opcional, debe ser null si fk_lugar está presente)
  * 
- * Nota: Solo puede haber UN registro por cliente. Si ya existe, se actualiza.
+ * Nota: Ahora permite múltiples registros por cliente. Se valida que no exista el mismo lugar/servicio.
  */
 export async function POST(req: Request) {
   const auth = requireCliente();
@@ -123,52 +120,53 @@ export async function POST(req: Request) {
       fk_servicio?: number | null;
     };
 
+    // Validar que no se proporcionen ambos o ninguno
+    if ((fk_lugar && fk_servicio) || (!fk_lugar && !fk_servicio)) {
+      return NextResponse.json(
+        { error: "Debe proporcionar exactamente uno: fk_lugar O fk_servicio" },
+        { status: 400 }
+      );
+    }
+
+    // Verificar si ya existe este item en la lista de deseos del cliente
+    const { rows: existing } = await pool.query(
+      `
+      SELECT id FROM lista_deseo 
+      WHERE fk_cliente = $1 
+        AND (
+          (fk_lugar = $2 AND $2 IS NOT NULL) OR 
+          (fk_servicio = $3 AND $3 IS NOT NULL)
+        )
+      `,
+      [clienteId, fk_lugar || null, fk_servicio || null]
+    );
+
+    if (existing?.length > 0) {
+      return NextResponse.json(
+        { error: "Este item ya está en tu lista de deseos" },
+        { status: 400 }
+      );
+    }
+
     // Usar la función de BD listar_deseos para insertar
     // La función maneja las validaciones internamente:
     // - No permite lugar y servicio al mismo tiempo
-    // - Requiere al menos uno de los dos
+    // - Require al menos uno de los dos
     // - Valida existencia de FK
-    // 
-    // Nota: La función solo hace INSERT, no UPDATE.
-    // Si ya existe un registro, usamos ON CONFLICT para actualizar.
-    
-    // Primero intentar con la función de BD
-    try {
-      await pool.query(
-        `SELECT listar_deseos($1, $2, $3)`,
-        [clienteId, fk_lugar || null, fk_servicio || null]
-      );
-    } catch (dbError: any) {
-      // Si ya existe un registro (unique violation), actualizarlo
-      if (dbError.code === '23505') {
-        // La función no maneja UPDATE, así que usamos ON CONFLICT
-        await pool.query(
-          `
-          INSERT INTO lista_deseo (fk_cliente, fk_lugar, fk_servicio)
-          VALUES ($1, $2, $3)
-          ON CONFLICT (fk_cliente) 
-          DO UPDATE SET 
-            fk_lugar = EXCLUDED.fk_lugar,
-            fk_servicio = EXCLUDED.fk_servicio
-          `,
-          [clienteId, fk_lugar || null, fk_servicio || null]
-        );
-      } else {
-        // Re-lanzar otros errores (la función ya tiene mensajes claros)
-        throw dbError;
-      }
-    }
+    await pool.query(
+      `SELECT listar_deseos($1, $2, $3)`,
+      [clienteId, fk_lugar || null, fk_servicio || null]
+    );
 
     return NextResponse.json({ 
       ok: true, 
-      message: "Lista de deseos actualizada exitosamente" 
+      message: "Item agregado a la lista de deseos exitosamente" 
     });
   } catch (e: any) {
-    console.error("Error actualizando lista de deseos:", e);
+    console.error("Error agregando a lista de deseos:", e);
     
     // Capturar errores de BD y traducirlos
-    // La función listar_deseos ya maneja validaciones y lanza excepciones claras
-    let errorMessage = "Error actualizando lista de deseos";
+    let errorMessage = "Error agregando a la lista de deseos";
     if (e.code === '23503') { // Foreign key violation
       errorMessage = "Uno de los IDs proporcionados (cliente, lugar o servicio) no existe en la base de datos";
     } else if (e.message) {
@@ -186,9 +184,12 @@ export async function POST(req: Request) {
 /**
  * DELETE /api/cliente/deseos
  * 
- * Eliminar item de la lista de deseos del cliente.
+ * Eliminar item(s) de la lista de deseos del cliente.
+ * 
+ * Query params:
+ * - id: ID específico del item a eliminar (opcional). Si no se proporciona, elimina todos.
  */
-export async function DELETE() {
+export async function DELETE(req: Request) {
   const auth = requireCliente();
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
@@ -197,10 +198,47 @@ export async function DELETE() {
   const clienteId = auth.session.clienteId!;
 
   try {
-    const { rowCount } = await pool.query(
-      `DELETE FROM lista_deseo WHERE fk_cliente = $1`,
-      [clienteId]
-    );
+    const { searchParams } = new URL(req.url);
+    const idParam = searchParams.get("id");
+
+    let rowCount: number;
+
+    if (idParam) {
+      // Eliminar un item específico
+      const id = Number.parseInt(idParam);
+      if (isNaN(id) || id <= 0) {
+        return NextResponse.json(
+          { error: "ID inválido" },
+          { status: 400 }
+        );
+      }
+
+      // Verificar que el item pertenece al cliente
+      const { rows: checkRows } = await pool.query(
+        `SELECT id FROM lista_deseo WHERE id = $1 AND fk_cliente = $2`,
+        [id, clienteId]
+      );
+
+      if (!checkRows?.length) {
+        return NextResponse.json(
+          { error: "Item no encontrado o no pertenece a tu lista de deseos" },
+          { status: 404 }
+        );
+      }
+
+      const result = await pool.query(
+        `DELETE FROM lista_deseo WHERE id = $1 AND fk_cliente = $2`,
+        [id, clienteId]
+      );
+      rowCount = result.rowCount || 0;
+    } else {
+      // Eliminar todos los items del cliente
+      const result = await pool.query(
+        `DELETE FROM lista_deseo WHERE fk_cliente = $1`,
+        [clienteId]
+      );
+      rowCount = result.rowCount || 0;
+    }
 
     if (rowCount === 0) {
       return NextResponse.json(
@@ -211,7 +249,9 @@ export async function DELETE() {
 
     return NextResponse.json({ 
       ok: true, 
-      message: "Item eliminado de la lista de deseos exitosamente" 
+      message: idParam 
+        ? "Item eliminado de la lista de deseos exitosamente"
+        : `${rowCount} item(s) eliminado(s) de la lista de deseos exitosamente`
     });
   } catch (e: any) {
     console.error("Error eliminando de lista de deseos:", e);
