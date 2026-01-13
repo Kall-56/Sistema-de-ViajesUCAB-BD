@@ -81,7 +81,7 @@ export default function ServicioDetallePage() {
     fetchServicio()
   }, [params.id, router])
 
-  const handleAgregarAlCarrito = async () {
+  const handleAgregarAlCarrito = async () => {
     if (!servicio) return
 
     if (!session) {
@@ -131,17 +131,31 @@ export default function ServicioDetallePage() {
 
       if (!agregarRes.ok) {
         const errorData = await agregarRes.json()
-        throw new Error(errorData.error || "Error agregando al carrito")
+        const errorMessage = errorData.error || "Error agregando al carrito"
+        console.error("Error del servidor:", errorData)
+        throw new Error(errorMessage)
       }
 
+      const agregarData = await agregarRes.json()
+      console.log("Servicio agregado exitosamente:", agregarData)
+
       toast.success("Servicio agregado al carrito", {
-        description: "Puedes continuar agregando más servicios o ir al checkout",
+        description: "Redirigiendo al carrito...",
       })
 
       window.dispatchEvent(new Event("cart-updated"))
+      
+      // Redirigir al carrito después de un breve delay
+      setTimeout(() => {
+        router.push("/carrito")
+      }, 1000)
     } catch (error: any) {
       console.error("Error agregando al carrito:", error)
-      toast.error(error.message || "Error al agregar el servicio al carrito")
+      const errorMessage = error.message || "Error al agregar el servicio al carrito"
+      toast.error("Error", {
+        description: errorMessage,
+        duration: 5000,
+      })
     } finally {
       setAgregando(false)
     }

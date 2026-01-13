@@ -137,21 +137,60 @@ export async function DELETE(
       );
     }
 
-    // Eliminar todos los items del itinerario primero
-    const { rows: itemsRows } = await pool.query(
-      `SELECT id FROM itinerario WHERE fk_venta = $1`,
-      [idVenta]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-    for (const item of itemsRows) {
-      await pool.query(`SELECT eliminar_item_itinerario($1)`, [item.id]);
+      // Eliminar todos los items del itinerario primero
+      const { rows: itemsRows } = await client.query(
+        `SELECT id FROM itinerario WHERE fk_venta = $1`,
+        [idVenta]
+      );
+
+      for (const item of itemsRows) {
+        await client.query(`SELECT eliminar_item_itinerario($1)`, [item.id]);
+      }
+
+      // Eliminar pasajeros asociados (si existen)
+      await client.query(`DELETE FROM pasajero WHERE fk_venta = $1`, [idVenta]);
+
+      // Eliminar planes de cuotas y sus cuotas asociadas (si existen)
+      const { rows: planesCuotas } = await client.query(
+        `SELECT id_plan_cuotas FROM plan_cuotas WHERE fk_venta = $1`,
+        [idVenta]
+      );
+
+      for (const plan of planesCuotas) {
+        // Eliminar estados de cuotas (cuo_ecuo) asociados a las cuotas del plan
+        await client.query(
+          `DELETE FROM cuo_ecuo WHERE fk_cuota IN (SELECT id_cuota FROM cuota WHERE fk_plan_cuotas = $1)`,
+          [plan.id_plan_cuotas]
+        );
+        // Eliminar cuotas del plan
+        await client.query(
+          `DELETE FROM cuota WHERE fk_plan_cuotas = $1`,
+          [plan.id_plan_cuotas]
+        );
+        // Eliminar el plan de cuotas
+        await client.query(
+          `DELETE FROM plan_cuotas WHERE id_plan_cuotas = $1`,
+          [plan.id_plan_cuotas]
+        );
+      }
+
+      // Eliminar estados de venta
+      await client.query(`DELETE FROM ven_est WHERE fk_venta = $1`, [idVenta]);
+
+      // Eliminar la venta
+      await client.query(`DELETE FROM venta WHERE id_venta = $1`, [idVenta]);
+
+      await client.query("COMMIT");
+    } catch (e: any) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
     }
-
-    // Eliminar estados de venta
-    await pool.query(`DELETE FROM ven_est WHERE fk_venta = $1`, [idVenta]);
-
-    // Eliminar la venta
-    await pool.query(`DELETE FROM venta WHERE id_venta = $1`, [idVenta]);
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

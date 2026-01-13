@@ -127,8 +127,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, id_itinerario: idItinerario }, { status: 201 });
     }
   } catch (e: any) {
+    console.error("Error agregando item al itinerario:", e);
+    
+    // Capturar errores específicos de BD y traducirlos
+    let errorMessage = "Error agregando item al itinerario";
+    if (e.code === '23503') { // Foreign key violation
+      errorMessage = "El servicio o la venta especificada no existe";
+    } else if (e.message?.includes("no se puede modificar")) {
+      errorMessage = "Esta venta ya no puede ser modificada";
+    } else if (e.message?.includes("no encontrada")) {
+      errorMessage = "La venta especificada no existe";
+    } else if (e.message) {
+      errorMessage = e.message;
+    }
+    
     return NextResponse.json(
-      { error: e?.message ?? "Error agregando item al itinerario" },
+      { error: errorMessage },
       { status: 500 }
     );
   }
